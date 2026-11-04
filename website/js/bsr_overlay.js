@@ -19,7 +19,13 @@ export class BSROverlay {
         this.group = new THREE.Group();
         this.group.name = 'bsr_tracks_overlay';
         this.visible = false;
-        this.radius = options.radius || 1.008; // slightly above sphere to avoid z-fighting
+        this.radius = options.radius || 1.008; // used only when no surface function is set
+        // Height of the tracks above the relief (in globe radii) to avoid z-fighting
+        this.lift = options.lift || 0.0012;
+        // Max angular step between samples, degrees: segments follow the relief
+        this.sampleStepDeg = options.sampleStepDeg || 0.1;
+        // (latDeg, lonDeg) => radius of the relief surface; null = plain sphere
+        this.surfaceRadius = null;
     }
 
     /**
@@ -36,6 +42,52 @@ export class BSROverlay {
         } catch (err) {
             console.warn('Failed to load BSR tracks:', err);
             return null;
+        }
+    }
+
+    /**
+     * Sets the function that returns the relief radius at (lat, lon) and
+     * rebuilds the tracks so they lie on the current relief.
+     * @param {(latDeg: number, lonDeg: number) => number} fn
+     */
+    setSurfaceFunction(fn) {
+        this.surfaceRadius = fn;
+        this.buildGeometry();
+    }
+
+    /** Point on the relief (or on the plain sphere) lifted by `extra`. */
+    surfacePoint(latDeg, lonDeg, extra = 0) {
+        const r = this.surfaceRadius
+            ? this.surfaceRadius(latDeg, lonDeg) + this.lift + extra
+            : this.radius + extra;
+        return this.latLonToVector3(latDeg, lonDeg, r);
+    }
+
+    /**
+     * Densified path between two track points: interpolates along the great
+     * circle and puts every sample on the relief, so a segment never cuts
+     * through mountains.
+     */
+    samplePath(lat0, lon0, lat1, lon1, out) {
+        const a = this.latLonToVector3(lat0, lon0, 1);
+        const b = this.latLonToVector3(lat1, lon1, 1);
+        const angle = a.angleTo(b) * 180 / Math.PI;
+        const n = Math.max(1, Math.ceil(angle / this.sampleStepDeg));
+        const v = new this.THREE.Vector3();
+        for (let k = out.length ? 1 : 0; k <= n; k++) {
+            const t = k / n;
+            // Spherical linear interpolation of the unit vectors
+            const s = Math.sin(a.angleTo(b));
+            if (s < 1e-9) {
+                v.copy(a);
+            } else {
+                const w = a.angleTo(b);
+                v.copy(a).multiplyScalar(Math.sin((1 - t) * w) / s)
+                    .addScaledVector(b, Math.sin(t * w) / s);
+            }
+            const lat = Math.asin(Math.max(-1, Math.min(1, v.y))) * 180 / Math.PI;
+            const lon = Math.atan2(-v.z, v.x) * 180 / Math.PI;
+            out.push(this.surfacePoint(lat, lon));
         }
     }
 
@@ -97,25 +149,25 @@ export class BSROverlay {
 
             const points = [];
             const colors = [];
+            const path = [];
 
             for (let i = 0; i < count; i++) {
-                const vec = this.latLonToVector3(lats[i], lons[i]);
-                points.push(vec);
+                // Markers sit slightly higher than the line
+                points.push(this.surfacePoint(lats[i], lons[i], this.lift));
                 const col = this.getConductivityColor(mcs[i]);
                 colors.push(col.r, col.g, col.b);
+                if (i > 0) this.samplePath(lats[i - 1], lons[i - 1], lats[i], lons[i], path);
             }
 
-            // 1. Draw smooth trajectory line
-            const curve = new this.THREE.CatmullRomCurve3(points);
-            const tubePoints = curve.getPoints(points.length * 2);
-            const lineGeo = new this.THREE.BufferGeometry().setFromPoints(tubePoints);
+            // 1. Trajectory line draped over the relief
+            const lineGeo = new this.THREE.BufferGeometry().setFromPoints(path);
             const lineMat = new this.THREE.LineBasicMaterial({
                 color: 0x4fa3e3,
                 transparent: true,
-                opacity: 0.65,
-                linewidth: 1.5
+                opacity: 0.9
             });
             const line = new this.THREE.Line(lineGeo, lineMat);
+            line.renderOrder = 4;
             this.group.add(line);
 
             // 2. Draw measurement points with color based on m_c
@@ -146,4 +198,3 @@ export class BSROverlay {
         return this.visible;
     }
 }
-
