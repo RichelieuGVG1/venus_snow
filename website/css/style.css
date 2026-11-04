@@ -1,6 +1,6 @@
 /* ==========================================================================
    VENUS 3D INTERACTIVE ATLAS — Dual Theme (Light + Dark)
-   Author: Vasiliy Guryanov
+   Author: Vasily Guryanov
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -929,4 +929,38 @@ body.scope-region [data-scope="globe"] {
 .topmap-line-level {
   border-top-style: dashed;
   border-top-color: #4fc3f7;
+}
+
+/* --------------------------------------------------------------------------
+   Checkboxes + download buttons, snapshot row
+   -------------------------------------------------------------------------- */
+.options-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.options-row .checkbox-list {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.download-stack {
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.download-stack .btn-secondary {
+  width: 100%;
+  height: auto;
+  min-height: 34px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.btn-secondary-row .btn-primary {
+  height: 34px;
+  font-size: 10.5px;
 }

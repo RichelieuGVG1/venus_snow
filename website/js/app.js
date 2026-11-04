@@ -9,7 +9,7 @@
  * The behaviour mirrors the reference Plotly pages in
  * venus_snow/results/export_3d/*.html.
  *
- * Author: Vasiliy Guryanov
+ * Author: Vasily Guryanov
  */
 
 import * as THREE from '/vendor/three.module.js';
@@ -1115,7 +1115,12 @@ function initUI() {
 
 function buildRegionPills() {
     dom.regionPills.innerHTML = '';
-    state.manifest.objects.forEach((obj) => {
+    // Globe and "Гора Гула" swap places in the switcher
+    const order = state.manifest.objects.slice();
+    const iGlobe = order.findIndex((o) => isGlobe(o));
+    const iGula = order.findIndex((o) => o.id === 'region_gora_gula');
+    if (iGlobe >= 0 && iGula >= 0) [order[iGlobe], order[iGula]] = [order[iGula], order[iGlobe]];
+    order.forEach((obj) => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'model-pill';
@@ -1188,14 +1193,14 @@ function updateTelemetry() {
         const [hMin, hMax] = meta.height_range_km || [0, 0];
         rows.push(['объект', meta.name, true]);
         rows.push(['диапазон высот', `${fmtNum(hMin, 1)} … ${fmtNum(hMax, 1)} км`]);
-        rows.push([`площадь снега при p ≥ ${thr.toFixed(2)} (${srcLabel})`, `${fmtNum(Math.round(snowArea))} км²`, true]);
+        rows.push([`площадь снега при p ≥ ${thr.toFixed(2)} (${srcLabel})`, `${fmtNum(Math.round(snowArea))} км²`]);
         rows.push(['доля поверхности под снегом', `${fmtNum(100 * snowArea / Math.max(obj.totalArea, 1), 2)} %`]);
         rows.push(['вертикальное преувеличение', `${state.exag[meta.id]}×`]);
     } else {
         rows.push(['регион', meta.name, true]);
         rows.push(['максимальная высота', `${fmtNum((meta.height_range_km || [0, 0])[1], 2)} км`]);
         rows.push(['снеговая линия h_c', meta.snowline_km != null ? `${fmtNum(meta.snowline_km, 2)} км` : 'не выделена']);
-        rows.push([`площадь снега при p ≥ ${thr.toFixed(2)} (${srcLabel})`, `${fmtNum(Math.round(snowArea))} км²`, true]);
+        rows.push([`площадь снега при p ≥ ${thr.toFixed(2)} (${srcLabel})`, `${fmtNum(Math.round(snowArea))} км²`]);
         rows.push(['доля региона под снегом', `${fmtNum(100 * snowArea / Math.max(obj.totalArea, 1), 2)} %`]);
 
         if (state.planeOn && obj.heights) {
@@ -1218,10 +1223,6 @@ function updateTelemetry() {
         } else {
             rows.push(['площадь выше плоскости', 'плоскость скрыта']);
         }
-    }
-
-    if (meta.triangles && meta.vertices) {
-        rows.push(['сетка (полигоны / вершины)', `${fmtNum(meta.triangles)} / ${fmtNum(meta.vertices)}`]);
     }
 
     dom.telemetry.innerHTML = '';

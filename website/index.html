@@ -116,47 +116,45 @@
         <div class="slider-hint">Уровень плоскости, км. Её пересечение с рельефом подсвечено голубой изолинией.</div>
       </div>
 
-      <!-- Checkboxes -->
-      <div class="checkbox-list">
-        <label class="form-checkbox">
-          <input type="checkbox" id="check-show-snow" checked>
-          <span>Показать снег</span>
-        </label>
-        <label class="form-checkbox" data-scope="region">
-          <input type="checkbox" id="check-contours" checked>
-          <span>Изолинии (шаг 1 км)</span>
-        </label>
-        <label class="form-checkbox" data-scope="region">
-          <input type="checkbox" id="check-grid" checked>
-          <span>Координатная сетка</span>
-        </label>
-        <label class="form-checkbox" data-scope="globe">
-          <input type="checkbox" id="check-frames" checked>
-          <span>Рамки регионов</span>
-        </label>
-        <label class="form-checkbox" data-scope="globe">
-          <input type="checkbox" id="check-bsr-tracks">
-          <span>Треки BSR (бистатический радар)</span>
-        </label>
-        <label class="form-checkbox">
-          <input type="checkbox" id="check-autorotate" checked>
-          <span>Автовращение камеры</span>
-        </label>
+      <!-- Checkboxes with download buttons on the right -->
+      <div class="options-row">
+        <div class="checkbox-list">
+          <label class="form-checkbox">
+            <input type="checkbox" id="check-show-snow" checked>
+            <span>Показать снег</span>
+          </label>
+          <label class="form-checkbox" data-scope="region">
+            <input type="checkbox" id="check-contours" checked>
+            <span>Изолинии (шаг 1 км)</span>
+          </label>
+          <label class="form-checkbox" data-scope="region">
+            <input type="checkbox" id="check-grid" checked>
+            <span>Координатная сетка</span>
+          </label>
+          <label class="form-checkbox" data-scope="globe">
+            <input type="checkbox" id="check-frames" checked>
+            <span>Рамки регионов</span>
+          </label>
+          <label class="form-checkbox" data-scope="globe">
+            <input type="checkbox" id="check-bsr-tracks">
+            <span>Треки BSR (бистатический радар)</span>
+          </label>
+          <label class="form-checkbox">
+            <input type="checkbox" id="check-autorotate" checked>
+            <span>Автовращение камеры</span>
+          </label>
+        </div>
+        <div class="download-stack">
+          <button type="button" class="btn-secondary" id="btn-export-glb">СКАЧАТЬ МОДЕЛЬ (.GLB)</button>
+          <button type="button" class="btn-secondary" id="btn-export-obj">ЭКСПОРТ .OBJ + .MTL</button>
+        </div>
       </div>
 
-      <!-- Action Buttons -->
-      <button type="button" class="btn-primary" id="btn-export-glb">
-        СКАЧАТЬ МОДЕЛЬ (.GLB)
-      </button>
-
+      <!-- Snapshot and project info -->
       <div class="btn-secondary-row">
-        <button type="button" class="btn-secondary" id="btn-export-obj">ЭКСПОРТ .OBJ + .MTL</button>
-        <button type="button" class="btn-secondary" id="btn-snapshot">СНИМОК (.PNG)</button>
+        <button type="button" class="btn-primary" id="btn-snapshot">СНИМОК (.PNG)</button>
+        <button type="button" class="btn-secondary" id="btn-open-info">О НАУЧНОМ ПРОЕКТЕ</button>
       </div>
-
-      <button type="button" class="btn-secondary" id="btn-open-info" style="width:100%;">
-        О НАУЧНОМ ПРОЕКТЕ
-      </button>
     </div>
 
     <!-- Panel Footer Copyright -->
