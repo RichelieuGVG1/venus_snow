@@ -146,7 +146,7 @@
   "objects": [
     {
       "id": "globe",
-      "name": "Венера",
+      "name": "Глобус Венеры",
       "type": "globe",
       "glb": "venus_globe.glb",
       "textures": {
