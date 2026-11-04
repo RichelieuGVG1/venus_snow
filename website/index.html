@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,45 +18,50 @@
   </main>
 
   <!-- ========================================================================
-       Left Main Control Panel (Matches Screenshot 2)
+       Left Main Control Panel
        ======================================================================== -->
   <aside class="main-panel">
     <div class="main-panel-scroll">
       <!-- Title Section -->
-      <div>
-        <h1 class="panel-title">Интеллектуальная система анализа металлического снега Венеры</h1>
-        <p class="panel-subtitle">Моделирование и динамическая оптимизация отображения фаций рельефа по данным КА «Магеллан» и ML</p>
+      <div class="panel-header-section">
+        <div>
+          <h1 class="panel-title">Атлас Венеры</h1>
+          <p class="panel-subtitle">Интеллектуальная система анализа металлического снега по данным КА «Магеллан» и ML</p>
+        </div>
+        <button class="theme-toggle-btn" id="btn-theme-toggle" title="Переключить тему">
+          <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg class="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
       </div>
 
-      <!-- Model Switcher Pills (Like 'Рейс №1', 'Рейс №2') -->
-      <nav class="pills-container" id="region-pills" aria-label="Выбор 3D-модели">
-        <!-- Injected dynamically via app.js -->
-      </nav>
+      <!-- Region Switcher in Legend-style -->
+      <div class="region-switcher">
+        <div class="region-switcher-header">
+          <span class="form-label">ОБЪЕКТ / РЕГИОН</span>
+        </div>
+        <nav class="pills-container" id="region-pills" aria-label="Выбор 3D-модели">
+          <!-- Injected dynamically via app.js -->
+        </nav>
+      </div>
 
       <!-- Dropdown Selectors Grid -->
       <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label" for="select-region">РЕГИОН ВЕНЕРЫ</label>
-          <select id="select-region" class="form-select"></select>
-        </div>
-        <div class="form-group">
           <label class="form-label" for="select-layer">РАДАРНЫЙ СЛОЙ</label>
           <select id="select-layer" class="form-select"></select>
         </div>
+        <div class="form-group">
+          <label class="form-label" for="select-display-mode">РЕЖИМ СЕТКИ</label>
+          <select id="select-display-mode" class="form-select">
+            <option value="solid" selected>Сплошная (PBR)</option>
+            <option value="overlay">Наложение сетки</option>
+            <option value="wireframe">Полигональная сетка</option>
+            <option value="points">Облако точек</option>
+          </select>
+        </div>
       </div>
 
-      <!-- Display Mode Select -->
-      <div class="form-group">
-        <label class="form-label" for="select-display-mode">РЕЖИМ ОТОБРАЖЕНИЯ СЕТКИ</label>
-        <select id="select-display-mode" class="form-select">
-          <option value="solid" selected>Сплошная модель (PBR рендер)</option>
-          <option value="overlay">Модель с наложением сетки (Wireframe Overlay)</option>
-          <option value="wireframe">Только полигональная сетка (Pure Wireframe)</option>
-          <option value="points">Облако вершинных точек (Point Cloud)</option>
-        </select>
-      </div>
-
-      <!-- Sliders (Matches Screenshot 2 Slider Style) -->
+      <!-- Sliders -->
       <div class="slider-block">
         <div class="slider-header">
           <span class="slider-title">Порог вероятности снега (ML)</span>
@@ -64,13 +69,13 @@
         </div>
         <input type="range" id="slider-snow-threshold" min="0.0" max="1.0" step="0.01" value="0.77">
         <div class="slider-hint">
-          Модель меняется в реальном времени: заснеженные области выше порога окрашиваются металлическим льдом и оконтуриваются сиянием.
+          Заснеженные области выше порога окрашиваются металлическим льдом.
         </div>
       </div>
 
       <div class="slider-block">
         <div class="slider-header">
-          <span class="slider-title">Шероховатость поверхности (Roughness)</span>
+          <span class="slider-title">Шероховатость (Roughness)</span>
           <span class="slider-value" id="val-roughness">0.82</span>
         </div>
         <input type="range" id="slider-roughness" min="0.0" max="1.0" step="0.02" value="0.82">
@@ -92,42 +97,42 @@
         <input type="range" id="slider-sun-elev" min="5" max="85" step="1" value="50">
       </div>
 
-      <!-- Checkboxes (Matches Screenshot 2 Checkboxes) -->
+      <!-- Checkboxes -->
       <div class="checkbox-list">
         <label class="form-checkbox">
           <input type="checkbox" id="check-snow-active" checked>
-          <span>ДИНАМИЧЕСКАЯ ПОДСВЕТКА СНЕГА НА 3D-МОДЕЛИ</span>
+          <span>ДИНАМИЧЕСКАЯ ПОДСВЕТКА СНЕГА</span>
         </label>
         <label class="form-checkbox">
           <input type="checkbox" id="check-snow-isolate">
-          <span>ИЗОЛЯЦИЯ ЗАСНЕЖЕННЫХ ПИКОВ (СКРЫТЬ НИЗИНЫ)</span>
+          <span>ИЗОЛЯЦИЯ ЗАСНЕЖЕННЫХ ПИКОВ</span>
         </label>
         <label class="form-checkbox">
           <input type="checkbox" id="check-autorotate" checked>
-          <span>АВТОМАТИЧЕСКОЕ ВРАЩЕНИЕ КАМЕРЫ</span>
+          <span>АВТОВРАЩЕНИЕ КАМЕРЫ</span>
         </label>
         <label class="form-checkbox">
           <input type="checkbox" id="check-bsr-tracks">
-          <span>ТРЕКИ БИСТАТИЧЕСКОГО РАДАРА (BSR)</span>
+          <span>ТРЕКИ BSR (БИСТАТИЧЕСКИЙ РАДАР)</span>
         </label>
       </div>
 
-      <!-- Primary Action Buttons (Large Blue Button at Bottom) -->
+      <!-- Action Buttons -->
       <button class="btn-primary" id="btn-export-glb">
         СКАЧАТЬ МОДЕЛЬ (.GLB)
       </button>
 
       <div class="btn-secondary-row">
-        <button class="btn-secondary" id="btn-export-obj">ЭКСПОРТ В .OBJ + .MTL</button>
+        <button class="btn-secondary" id="btn-export-obj">ЭКСПОРТ .OBJ + .MTL</button>
         <button class="btn-secondary" id="btn-snapshot">СНИМОК (.PNG)</button>
       </div>
 
-      <a class="btn-secondary" href="/results/venus_3d_export.zip" download="venus_3d_export.zip">
-        ПОЛНЫЙ ПАКЕТ 3D-МОДЕЛЕЙ (.ZIP, 85 МБ)
-      </a>
+      <button class="btn-secondary" id="btn-open-info" style="width:100%;">
+        О НАУЧНОМ ПРОЕКТЕ
+      </button>
     </div>
 
-    <!-- Panel Footer Copyright (Matches Screenshot 2) -->
+    <!-- Panel Footer Copyright -->
     <div class="panel-footer">
       <span>© 2026 Василий Гурьянов</span>
       <span style="font-family: var(--font-mono); font-size: 10px;">Three.js / Magellan GxDR</span>
@@ -135,7 +140,7 @@
   </aside>
 
   <!-- ========================================================================
-       Right Floating Card: Legend & Telemetry (Matches Screenshot 2)
+       Right Floating Card: Legend & Telemetry
        ======================================================================== -->
   <aside class="legend-panel">
     <div class="legend-panel-header">
@@ -157,7 +162,7 @@
     <div class="telemetry-grid">
       <div class="telemetry-row">
         <span class="telemetry-label">Текущий объект:</span>
-        <span class="telemetry-value accent" id="legend-region-name">Горы Максвелла</span>
+        <span class="telemetry-value accent" id="legend-region-name">Глобус Венеры</span>
       </div>
       <div class="telemetry-row">
         <span class="telemetry-label">Диапазон высот:</span>
@@ -176,14 +181,10 @@
         <span class="telemetry-value" id="legend-mesh-stats">43k / 22k</span>
       </div>
     </div>
-
-    <button class="btn-info" id="btn-open-info">
-      О НАУЧНОМ ПРОЕКТЕ
-    </button>
   </aside>
 
   <!-- ========================================================================
-       Bottom Center Capsule Controller (Matches Screenshot 2)
+       Bottom Center Capsule Controller
        ======================================================================== -->
   <div class="bottom-timeline">
     <button class="timeline-play-btn" id="btn-timeline-play" title="Пауза / Вращение камеры">

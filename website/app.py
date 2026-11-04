@@ -35,8 +35,12 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 # Base paths
 ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
-WEB_DIR = os.path.join(ROOT_DIR, "web")
-RESULTS_DIR = os.path.join(ROOT_DIR, "results")
+# The website/ directory IS our web root - serve HTML/CSS/JS from here
+WEB_DIR = ROOT_DIR
+# Results and export_3d are in the sibling venus_snow/ directory
+PROJECT_DIR = os.path.dirname(ROOT_DIR)
+VENUS_DATA_DIR = os.path.join(PROJECT_DIR, "venus_snow")
+RESULTS_DIR = os.path.join(VENUS_DATA_DIR, "results")
 EXPORT_3D_DIR = os.path.join(RESULTS_DIR, "export_3d")
 MANIFEST_PATH = os.path.join(EXPORT_3D_DIR, "manifest.json")
 SUMMARY_PATH = os.path.join(RESULTS_DIR, "summary.json")
@@ -114,19 +118,18 @@ class VenusAtlasHandler(SimpleHTTPRequestHandler):
         """Resolves request path to local file path safely."""
         clean_path = posixpath.normpath(urllib.parse.unquote(clean_path)).lstrip("/")
 
-        # Check in web/ directory first
+        # Check in web/ directory first (website/ root)
         candidate = os.path.join(WEB_DIR, clean_path)
         if os.path.isfile(candidate):
             return candidate
 
-        # Direct mapping for utils/ (e.g. /utils/BufferGeometryUtils.js -> web/vendor/BufferGeometryUtils.js)
-        if clean_path.startswith("utils/"):
-            filename = posixpath.basename(clean_path)
-            candidate = os.path.join(WEB_DIR, "vendor", filename)
+        # Direct mapping for vendor/ JS libs
+        if clean_path.startswith("vendor/"):
+            candidate = os.path.join(WEB_DIR, clean_path)
             if os.path.isfile(candidate):
                 return candidate
 
-        # Check export_3d/ alias
+        # Check export_3d/ alias -> points to venus_snow/results/export_3d/
         if clean_path.startswith("export_3d/"):
             sub = clean_path[len("export_3d/"):]
             candidate = os.path.join(EXPORT_3D_DIR, sub)
@@ -135,27 +138,16 @@ class VenusAtlasHandler(SimpleHTTPRequestHandler):
 
         # Check results/ path
         if clean_path.startswith("results/"):
-            candidate = os.path.join(ROOT_DIR, clean_path)
+            sub = clean_path[len("results/"):]
+            candidate = os.path.join(RESULTS_DIR, sub)
             if os.path.isfile(candidate):
                 return candidate
 
         # Check figures/ path
         if clean_path.startswith("figures/"):
-            candidate = os.path.join(ROOT_DIR, clean_path)
+            candidate = os.path.join(VENUS_DATA_DIR, clean_path)
             if os.path.isfile(candidate):
                 return candidate
-
-        # Check static/ alias
-        if clean_path.startswith("static/"):
-            sub = clean_path[len("static/"):]
-            candidate = os.path.join(WEB_DIR, sub)
-            if os.path.isfile(candidate):
-                return candidate
-
-        # Direct in ROOT_DIR
-        candidate = os.path.join(ROOT_DIR, clean_path)
-        if os.path.isfile(candidate):
-            return candidate
 
         return None
 
@@ -185,6 +177,7 @@ class VenusAtlasHandler(SimpleHTTPRequestHandler):
             "manifest_found": os.path.isfile(MANIFEST_PATH),
             "summary_found": os.path.isfile(SUMMARY_PATH),
             "root_dir": ROOT_DIR,
+            "export_3d_dir": EXPORT_3D_DIR,
             "models": []
         }
         if os.path.isdir(EXPORT_3D_DIR):
@@ -278,6 +271,8 @@ class VenusAtlasHandler(SimpleHTTPRequestHandler):
             self.send_header("Accept-Ranges", "bytes")
             if filepath.endswith((".glb", ".zip")):
                 self.send_header("Cache-Control", "public, max-age=86400")
+            elif filepath.endswith(".png"):
+                self.send_header("Cache-Control", "public, max-age=3600")
             self.end_headers()
 
             with open(filepath, "rb") as f:
@@ -339,8 +334,8 @@ def main():
     print("=" * 66)
     print("  VENUS 3D ATLAS // INTERACTIVE VISUALIZER & EXPORTER")
     print(f"  Server running at: {url_local}")
-    print(f"  Models directory:  results/export_3d")
-    print(f"  Web frontend:      web/index.html")
+    print(f"  Models directory:  {EXPORT_3D_DIR}")
+    print(f"  Web frontend:      {WEB_DIR}/index.html")
     print("  Press Ctrl+C (Command+C) to stop the server")
     print("=" * 66)
 
@@ -363,4 +358,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
