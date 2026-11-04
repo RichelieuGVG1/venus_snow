@@ -1,13 +1,29 @@
 <!DOCTYPE html>
 <html lang="ru" data-theme="light">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Атлас Венеры — Исследование металлического снега</title>
-  <meta name="description" content="Интеллектуальная система анализа металлического снега Венеры по данным КА Магеллан и моделей машинного обучения">
+  <meta name="description"
+    content="Интеллектуальная система анализа металлического снега Венеры по данным КА Магеллан и моделей машинного обучения">
+  <script>
+    // Apply the saved (or system) theme before first paint to avoid a flash
+    (function () {
+      var theme = 'light';
+      try {
+        var saved = localStorage.getItem('venus-theme');
+        if (saved === 'light' || saved === 'dark') theme = saved;
+        else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark';
+      } catch (e) { }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
   <link rel="stylesheet" href="/css/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%230284c7'/><circle cx='38' cy='36' r='18' fill='%23e0f2fe'/></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%230284c7'/><circle cx='38' cy='36' r='18' fill='%23e0f2fe'/></svg>">
 </head>
+
 <body>
 
   <!-- ========================================================================
@@ -26,15 +42,25 @@
       <div class="panel-header-section">
         <div>
           <h1 class="panel-title">Атлас Венеры</h1>
-          <p class="panel-subtitle">Интеллектуальная система анализа металлического снега по данным КА «Магеллан» и ML</p>
+          <p class="panel-subtitle">Интеллектуальная система анализа металлического снега по данным КА «Магеллан» и ML
+          </p>
         </div>
-        <button class="theme-toggle-btn" id="btn-theme-toggle" title="Переключить тему">
-          <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          <svg class="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <button type="button" class="theme-toggle-btn" id="btn-theme-toggle" title="Переключить тему"
+          aria-label="Переключить тему">
+          <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <circle cx="12" cy="12" r="5" />
+            <path
+              d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+          </svg>
+          <svg class="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
         </button>
       </div>
 
-      <!-- Region Switcher in Legend-style -->
+      <!-- Region Switcher -->
       <div class="region-switcher">
         <div class="region-switcher-header">
           <span class="form-label">ОБЪЕКТ / РЕГИОН</span>
@@ -44,90 +70,91 @@
         </nav>
       </div>
 
-      <!-- Dropdown Selectors Grid -->
+      <!-- Layer / snow source -->
       <div class="form-grid-2">
         <div class="form-group">
           <label class="form-label" for="select-layer">РАДАРНЫЙ СЛОЙ</label>
           <select id="select-layer" class="form-select"></select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="select-display-mode">РЕЖИМ СЕТКИ</label>
-          <select id="select-display-mode" class="form-select">
-            <option value="solid" selected>Сплошная (PBR)</option>
-            <option value="overlay">Наложение сетки</option>
-            <option value="wireframe">Полигональная сетка</option>
-            <option value="points">Облако точек</option>
+          <label class="form-label" for="select-snow-source">ИСТОЧНИК СНЕГА</label>
+          <select id="select-snow-source" class="form-select">
+            <option value="snow_prob" selected>Вероятность классификатора</option>
+            <option value="anomaly">Аномальность без учителя</option>
           </select>
         </div>
       </div>
 
-      <!-- Sliders -->
-      <div class="slider-block">
-        <div class="slider-header">
-          <span class="slider-title">Порог вероятности снега (ML)</span>
-          <span class="slider-value" id="val-snow-threshold">0.77 (Оптимум)</span>
-        </div>
-        <input type="range" id="slider-snow-threshold" min="0.0" max="1.0" step="0.01" value="0.77">
-        <div class="slider-hint">
-          Заснеженные области выше порога окрашиваются металлическим льдом.
-        </div>
+      <div class="form-group">
+        <label class="form-label" for="select-view-mode">РЕЖИМ ОТОБРАЖЕНИЯ</label>
+        <select id="select-view-mode" class="form-select">
+          <option value="both" selected>Рельеф и снег</option>
+          <option value="relief">Только рельеф</option>
+          <option value="snow">Только снег</option>
+        </select>
       </div>
 
+      <!-- Relief exaggeration -->
       <div class="slider-block">
         <div class="slider-header">
-          <span class="slider-title">Шероховатость (Roughness)</span>
-          <span class="slider-value" id="val-roughness">0.82</span>
+          <span class="slider-title">Вертикальное преувеличение рельефа</span>
+          <span class="slider-value" id="val-exag">40×</span>
         </div>
-        <input type="range" id="slider-roughness" min="0.0" max="1.0" step="0.02" value="0.82">
+        <input type="range" id="slider-exag" min="0" max="120" step="5" value="40">
       </div>
 
-      <div class="slider-block">
+      <!-- Snowline plane (regions only) -->
+      <div class="slider-block" data-scope="region">
         <div class="slider-header">
-          <span class="slider-title">Металличность снега (Metalness)</span>
-          <span class="slider-value" id="val-metalness">0.75</span>
+          <label class="form-checkbox form-checkbox-inline">
+            <input type="checkbox" id="check-plane" checked>
+            <span>Плоскость снеговой линии</span>
+          </label>
+          <span class="slider-value" id="val-level">3.8 км</span>
         </div>
-        <input type="range" id="slider-metalness" min="0.0" max="1.0" step="0.02" value="0.75">
-      </div>
-
-      <div class="slider-block">
-        <div class="slider-header">
-          <span class="slider-title">Высота Солнца над горизонтом</span>
-          <span class="slider-value" id="val-sun-elev">50°</span>
-        </div>
-        <input type="range" id="slider-sun-elev" min="5" max="85" step="1" value="50">
+        <input type="range" id="slider-level" min="-1" max="11" step="0.1" value="3.8">
+        <div class="slider-hint">Уровень плоскости, км. Её пересечение с рельефом подсвечено голубой изолинией.</div>
       </div>
 
       <!-- Checkboxes -->
       <div class="checkbox-list">
         <label class="form-checkbox">
-          <input type="checkbox" id="check-snow-active" checked>
-          <span>ДИНАМИЧЕСКАЯ ПОДСВЕТКА СНЕГА</span>
+          <input type="checkbox" id="check-show-snow" checked>
+          <span>Показать снег</span>
         </label>
-        <label class="form-checkbox">
-          <input type="checkbox" id="check-snow-isolate">
-          <span>ИЗОЛЯЦИЯ ЗАСНЕЖЕННЫХ ПИКОВ</span>
+        <label class="form-checkbox" data-scope="region">
+          <input type="checkbox" id="check-contours" checked>
+          <span>Изолинии (шаг 1 км)</span>
+        </label>
+        <label class="form-checkbox" data-scope="region">
+          <input type="checkbox" id="check-grid" checked>
+          <span>Координатная сетка</span>
+        </label>
+        <label class="form-checkbox" data-scope="globe">
+          <input type="checkbox" id="check-frames" checked>
+          <span>Рамки регионов</span>
+        </label>
+        <label class="form-checkbox" data-scope="globe">
+          <input type="checkbox" id="check-bsr-tracks">
+          <span>Треки BSR (бистатический радар)</span>
         </label>
         <label class="form-checkbox">
           <input type="checkbox" id="check-autorotate" checked>
-          <span>АВТОВРАЩЕНИЕ КАМЕРЫ</span>
-        </label>
-        <label class="form-checkbox">
-          <input type="checkbox" id="check-bsr-tracks">
-          <span>ТРЕКИ BSR (БИСТАТИЧЕСКИЙ РАДАР)</span>
+          <span>Автовращение камеры</span>
         </label>
       </div>
 
       <!-- Action Buttons -->
-      <button class="btn-primary" id="btn-export-glb">
+      <button type="button" class="btn-primary" id="btn-export-glb">
         СКАЧАТЬ МОДЕЛЬ (.GLB)
       </button>
 
       <div class="btn-secondary-row">
-        <button class="btn-secondary" id="btn-export-obj">ЭКСПОРТ .OBJ + .MTL</button>
-        <button class="btn-secondary" id="btn-snapshot">СНИМОК (.PNG)</button>
+        <button type="button" class="btn-secondary" id="btn-export-obj">ЭКСПОРТ .OBJ + .MTL</button>
+        <button type="button" class="btn-secondary" id="btn-snapshot">СНИМОК (.PNG)</button>
       </div>
 
-      <button class="btn-secondary" id="btn-open-info" style="width:100%;">
+      <button type="button" class="btn-secondary" id="btn-open-info" style="width:100%;">
         О НАУЧНОМ ПРОЕКТЕ
       </button>
     </div>
@@ -140,61 +167,55 @@
   </aside>
 
   <!-- ========================================================================
-       Right Floating Card: Legend & Telemetry
+       Right Floating Card: Legend, Snow Threshold, Telemetry & Top-down Map
        ======================================================================== -->
   <aside class="legend-panel">
     <div class="legend-panel-header">
       <span>ЛЕГЕНДА КАРТЫ</span>
-      <span class="legend-layer-title" id="legend-title">Высота рельефа</span>
+      <span class="legend-layer-title" id="legend-title">высота, км</span>
     </div>
 
     <div class="legend-bar-container" id="legend-continuous-wrap">
       <div class="legend-bar" id="legend-bar"></div>
-      <div class="legend-ticks" id="legend-ticks">
-        <span>-2.0 км</span>
-        <span>4.5 км</span>
-        <span>11.3 км</span>
-      </div>
+      <div class="legend-ticks" id="legend-ticks"></div>
     </div>
 
     <div class="legend-categorical" id="legend-categorical" style="display: none;"></div>
 
-    <div class="telemetry-grid">
-      <div class="telemetry-row">
-        <span class="telemetry-label">Текущий объект:</span>
-        <span class="telemetry-value accent" id="legend-region-name">Глобус Венеры</span>
+    <!-- Snow threshold (moved from the left panel) -->
+    <div class="slider-block">
+      <div class="slider-header">
+        <span class="slider-title">Порог вероятности снега (ML)</span>
+        <span class="slider-value" id="val-snow-threshold">0.77 (оптимум)</span>
       </div>
-      <div class="telemetry-row">
-        <span class="telemetry-label">Диапазон высот:</span>
-        <span class="telemetry-value" id="legend-elev-range">0.0 .. 11.3 км</span>
+      <input type="range" id="slider-snow-threshold" min="0.05" max="0.99" step="0.01" value="0.77">
+      <div class="legend-snow-scale">
+        <div class="legend-bar legend-snow-bar"></div>
+        <div class="legend-ticks"><span id="snow-scale-min">p = 0.77</span><span>p = 1.00</span></div>
       </div>
-      <div class="telemetry-row">
-        <span class="telemetry-label">Снеговая линия (hc):</span>
-        <span class="telemetry-value" id="legend-snowline">5.51 км</span>
+      <div class="slider-hint" id="snow-hint">Области с вероятностью выше порога окрашены цветом снега.</div>
+    </div>
+
+    <div class="telemetry-grid" id="telemetry"></div>
+
+    <!-- Top-down map (regions only) -->
+    <div class="topmap-section" data-scope="region">
+      <div class="legend-panel-header">
+        <span>ВИД СВЕРХУ</span>
+        <span class="legend-layer-title" id="topmap-readout"></span>
       </div>
-      <div class="telemetry-row">
-        <span class="telemetry-label">Расчетная площадь снега:</span>
-        <span class="telemetry-value accent" id="legend-snow-area">534 040 км²</span>
+      <div class="topmap-wrap">
+        <canvas id="topmap-canvas"></canvas>
       </div>
-      <div class="telemetry-row">
-        <span class="telemetry-label">Сетка (полигоны / вершины):</span>
-        <span class="telemetry-value" id="legend-mesh-stats">43k / 22k</span>
+      <div class="topmap-legend">
+        <div class="topmap-legend-item"><span class="topmap-line topmap-line-snow"></span><span
+            id="topmap-legend-snow">граница снега, p = 0.77</span></div>
+        <div class="topmap-legend-item" id="topmap-legend-level-row"><span
+            class="topmap-line topmap-line-level"></span><span id="topmap-legend-level">изолиния снеговой линии, 3.80
+            км</span></div>
       </div>
     </div>
   </aside>
-
-  <!-- ========================================================================
-       Bottom Center Capsule Controller
-       ======================================================================== -->
-  <div class="bottom-timeline">
-    <button class="timeline-play-btn" id="btn-timeline-play" title="Пауза / Вращение камеры">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-    </button>
-    <div class="timeline-slider-wrap">
-      <input type="range" id="slider-sun-azimuth" min="0" max="360" step="2" value="45">
-    </div>
-    <span class="timeline-label" id="val-sun-azimuth">45° Азимут Солнца</span>
-  </div>
 
   <!-- ========================================================================
        Loading Progress Overlay
@@ -211,8 +232,10 @@
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title">Венера: Металлический снег и морфометрия рельефа</div>
-        <button class="modal-close-btn" id="btn-close-modal">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        <button type="button" class="modal-close-btn" id="btn-close-modal" aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </button>
       </div>
 
@@ -222,10 +245,15 @@
             1. Физическая природа феномена
           </h3>
           <p>
-            На равнинах Венеры температура атмосферы у поверхности достигает 460 °C при давлении около 92 бар. С высотой температура падает по вертикальному градиенту (около 8.5 К/км). На высотах более 3.7 - 5.5 км температура опускается ниже 380 °C, создавая условия конденсации паров халькогенидов и тяжелых металлов (теллур, висмут, сульфид висмута, галенит).
+            На равнинах Венеры температура атмосферы у поверхности достигает 460 °C при давлении около 92 бар. С высотой
+            температура падает по вертикальному градиенту (около 8.5 К/км). На высотах более 3.7 - 5.5 км температура
+            опускается ниже 380 °C, создавая условия конденсации паров халькогенидов и тяжелых металлов (теллур, висмут,
+            сульфид висмута, галенит).
           </p>
           <p style="margin-top: 6px;">
-            Образующийся на высокогорьях проводящий полупроводниковый налет («металлический снег») вызывает резкое падение радиоизлучательной способности (до e &lt; 0.5) и колоссальный рост диэлектрической проницаемости (до eps &gt; 30-50), ярко проявляясь на радарных изображениях КА «Магеллан».
+            Образующийся на высокогорьях проводящий полупроводниковый налет («металлический снег») вызывает резкое
+            падение радиоизлучательной способности (до e &lt; 0.5) и колоссальный рост диэлектрической проницаемости (до
+            eps &gt; 30-50), ярко проявляясь на радарных изображениях КА «Магеллан».
           </p>
         </div>
 
@@ -299,7 +327,8 @@
           </div>
         </div>
 
-        <div style="border-top: 1px solid var(--border-card); padding-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+        <div
+          style="border-top: 1px solid var(--border-card); padding-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
           <span>Автор исследования: Василий Гурьянов</span>
           <span>Three.js WebGL Engine</span>
         </div>
@@ -311,4 +340,5 @@
   <script type="module" src="/js/app.js"></script>
 
 </body>
+
 </html>
