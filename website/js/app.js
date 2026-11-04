@@ -223,6 +223,12 @@ async function switchModel(objectId) {
 
         if (!targetMesh) throw new Error('No mesh in GLB');
 
+        // В GLB-файлах нет атрибута NORMAL — без него освещение
+        // MeshStandardMaterial не работает, поэтому считаем нормали сами
+        if (!targetMesh.geometry.attributes.normal) {
+            targetMesh.geometry.computeVertexNormals();
+        }
+
         state.activeMesh = targetMesh;
         activeGroup.add(root);
 
@@ -258,7 +264,8 @@ async function applyTextureLayer(layerId) {
 
     // Load snow probability mask for dynamic shader
     const snowProbRelPath = textures['snow_prob_gray'] || textures['snow_prob'];
-    const snowProbTexture = await loadTexturePromise(`/export_3d/${snowProbRelPath}`);
+    // Маска вероятности — это данные, а не цвет: загружаем без sRGB-преобразования
+    const snowProbTexture = await loadTexturePromise(`/export_3d/${snowProbRelPath}`, { isData: true });
 
     // Compile dynamic PBR material with real-time snow shader
     const mat = createCustomPBRMaterial(baseTexture, snowProbTexture);
@@ -290,7 +297,21 @@ function createCustomPBRMaterial(baseTexture, snowProbTexture) {
 
         mat.userData.shader = shader;
 
+        // Собственная varying-переменная для UV: встроенная vUv в three r160
+        // объявляется только при определённых дефайнах (USE_UV), а карта
+        // map использует vMapUv, поэтому vUv во фрагментном шейдере недоступна.
+        shader.vertexShader = `
+            varying vec2 vSnowUv;
+        ` + shader.vertexShader.replace(
+            '#include <uv_vertex>',
+            `
+            #include <uv_vertex>
+            vSnowUv = uv;
+            `
+        );
+
         shader.fragmentShader = `
+            varying vec2 vSnowUv;
             uniform sampler2D uSnowProbMap;
             uniform float uSnowThreshold;
             uniform int uSnowActive;
@@ -305,7 +326,7 @@ function createCustomPBRMaterial(baseTexture, snowProbTexture) {
             #include <dithering_fragment>
 
             if (uSnowActive == 1) {
-                float prob = texture2D(uSnowProbMap, vUv).r;
+                float prob = texture2D(uSnowProbMap, vSnowUv).r;
 
                 if (uSnowIsolate == 1 && prob < uSnowThreshold) {
                     discard;
@@ -324,19 +345,26 @@ function createCustomPBRMaterial(baseTexture, snowProbTexture) {
     return mat;
 }
 
-function loadTexturePromise(url) {
-    if (state.loadedTextures[url]) {
-        return Promise.resolve(state.loadedTextures[url]);
+function loadTexturePromise(url, { isData = false } = {}) {
+    // Цветовые текстуры и текстуры-данные кешируются раздельно
+    const cacheKey = isData ? `${url}#data` : url;
+    if (state.loadedTextures[cacheKey]) {
+        return Promise.resolve(state.loadedTextures[cacheKey]);
     }
     const texLoader = new THREE.TextureLoader();
-    return new Promise((resolve) => {
-        texLoader.load(url, (tex) => {
-            tex.flipY = false;
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.generateMipmaps = true;
-            state.loadedTextures[url] = tex;
-            resolve(tex);
-        });
+    return new Promise((resolve, reject) => {
+        texLoader.load(
+            url,
+            (tex) => {
+                tex.flipY = false;
+                tex.colorSpace = isData ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+                tex.generateMipmaps = true;
+                state.loadedTextures[cacheKey] = tex;
+                resolve(tex);
+            },
+            undefined,
+            (err) => reject(new Error(`Не удалось загрузить текстуру ${url}`))
+        );
     });
 }
 
@@ -427,7 +455,6 @@ function bindDomElements() {
     dom.loadingText = document.getElementById('loading-text');
 
     dom.regionPillContainer = document.getElementById('region-pills');
-    //dom.selectRegion = document.getElementById('select-region');
     dom.selectLayer = document.getElementById('select-layer');
     dom.selectDisplayMode = document.getElementById('select-display-mode');
 
@@ -506,16 +533,7 @@ function updateActivePills() {
 
 function populateSelectDropdowns() {
     if (!state.manifest) return;
-    /*
-        // Region Select
-        dom.selectRegion.innerHTML = '';
-        state.manifest.objects.forEach((obj) => {
-            const opt = document.createElement('option');
-            opt.value = obj.id;
-            opt.textContent = obj.name;
-            dom.selectRegion.appendChild(opt);
-        });
-    */
+
     // Layer Select
     dom.selectLayer.innerHTML = '';
     const layers = state.manifest.layers || {};
@@ -533,7 +551,6 @@ function populateSelectDropdowns() {
 }
 
 function updateSelectInputs() {
-    //if (dom.selectRegion) dom.selectRegion.value = state.activeObjectId;
     if (dom.selectLayer) dom.selectLayer.value = state.activeLayerId;
 }
 
@@ -602,12 +619,6 @@ function updateSnowMetricsDisplay(threshold) {
 // Event Listeners & Interactive Handlers
 // --------------------------------------------------------------------------
 function initEventListeners() {
-    // Select Region change
-    /*
-    dom.selectRegion.addEventListener('change', (e) => {
-        switchModel(e.target.value);
-    });
-*/
     // Select Layer change
     dom.selectLayer.addEventListener('change', (e) => {
         applyTextureLayer(e.target.value);
@@ -775,4 +786,9 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-window.addEventListener('DOMContentLoaded', initApp);
+window.addEventListener('DOMContentLoaded', () => {
+    initApp().catch((err) => {
+        console.error('Ошибка инициализации приложения:', err);
+        updateLoadingProgress(`Ошибка запуска: ${err.message}`);
+    });
+});
