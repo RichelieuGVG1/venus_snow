@@ -104,12 +104,12 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="select-view-mode">РЕЖИМ ОТОБРАЖЕНИЯ</label>
-        <select id="select-view-mode" class="form-select">
-          <option value="both" selected>Рельеф и снег</option>
-          <option value="relief">Только рельеф</option>
-          <option value="snow">Только снег</option>
-        </select>
+        <span class="form-label" id="view-mode-label">РЕЖИМ ОТОБРАЖЕНИЯ</span>
+        <div class="mode-switch" id="view-mode-buttons" role="group" aria-labelledby="view-mode-label">
+          <button type="button" class="mode-btn active" data-mode="both" aria-pressed="true">Рельеф и снег</button>
+          <button type="button" class="mode-btn" data-mode="relief" aria-pressed="false">Только рельеф</button>
+          <button type="button" class="mode-btn" data-mode="snow" aria-pressed="false">Только снег</button>
+        </div>
       </div>
 
       <!-- Relief exaggeration -->
@@ -122,7 +122,7 @@
       </div>
 
       <!-- Snowline plane (regions only) -->
-      <div class="slider-block" data-scope="region">
+      <div class="slider-block" data-scope="region" id="plane-block">
         <div class="slider-header">
           <label class="form-checkbox form-checkbox-inline">
             <input type="checkbox" id="check-plane" checked>
@@ -131,16 +131,12 @@
           <span class="slider-value" id="val-level">3.8 км</span>
         </div>
         <input type="range" id="slider-level" min="-1" max="11" step="0.1" value="3.8">
-        <div class="slider-hint">Уровень плоскости, км. Её пересечение с рельефом подсвечено голубой изолинией.</div>
+        <div class="slider-hint">Уровень плоскости, км. Ее пересечение с рельефом подсвечено голубой изолинией.</div>
       </div>
 
       <!-- Checkboxes with download buttons on the right -->
       <div class="options-row">
         <div class="checkbox-list">
-          <label class="form-checkbox">
-            <input type="checkbox" id="check-show-snow" checked>
-            <span>Показать снег</span>
-          </label>
           <label class="form-checkbox" data-scope="region">
             <input type="checkbox" id="check-contours" checked>
             <span>Изолинии (шаг 1 км)</span>
@@ -199,7 +195,7 @@
     <div class="legend-categorical" id="legend-categorical" style="display: none;"></div>
 
     <!-- Snow threshold (moved from the left panel) -->
-    <div class="slider-block">
+    <div class="slider-block" id="snow-threshold-block">
       <div class="slider-header">
         <span class="slider-title">Порог вероятности снега (ML)</span>
         <span class="slider-value" id="val-snow-threshold">0.77</span>
@@ -224,7 +220,7 @@
         <canvas id="topmap-canvas"></canvas>
       </div>
       <div class="topmap-legend">
-        <div class="topmap-legend-item"><span class="topmap-line topmap-line-snow"></span><span
+        <div class="topmap-legend-item" id="topmap-legend-snow-row"><span class="topmap-line topmap-line-snow"></span><span
             id="topmap-legend-snow">граница снега, p = 0.77</span></div>
         <div class="topmap-legend-item" id="topmap-legend-level-row"><span
             class="topmap-line topmap-line-level"></span><span id="topmap-legend-level">изолиния снеговой линии, 3.80

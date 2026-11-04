@@ -964,3 +964,63 @@ body.scope-region [data-scope="globe"] {
   height: 34px;
   font-size: 10.5px;
 }
+/* --------------------------------------------------------------------------
+   View mode switch: three buttons, the active one looks like .btn-primary
+   -------------------------------------------------------------------------- */
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.mode-btn {
+  min-height: 34px;
+  padding: 4px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.mode-btn:hover {
+  border-color: var(--primary-blue);
+  color: var(--primary-blue);
+  background: var(--primary-blue-soft);
+}
+
+.mode-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.25);
+}
+
+.mode-btn.active,
+.mode-btn.active:hover {
+  background: var(--primary-blue);
+  border-color: var(--primary-blue);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Inactive control block: faded, "not-allowed" cursor over the whole block.
+   Children ignore the pointer so the block's own cursor always shows.
+   -------------------------------------------------------------------------- */
+.slider-block.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  user-select: none;
+}
+
+.slider-block.is-disabled * {
+  pointer-events: none;
+}

@@ -43,10 +43,11 @@ const state = {
     activeLayerId: 'elev',
     snowSource: 'snow_prob',
     snowThreshold: DEFAULT_THRESHOLD,
-    showSnow: true,
-    viewMode: 'both',            // both | relief | snow
+    viewMode: 'both',            // both | relief | snow (also controls snow on the top-down map)
     contours: true,
     planeOn: true,
+    planeLocked: false,          // true while the relief exaggeration is 0
+    planeOnBeforeLock: true,     // checkbox state to restore when the exaggeration leaves 0
     level: 3.8,
     showGrid: true,
     showFrames: true,
@@ -115,15 +116,15 @@ function bindDomElements() {
         regionPills: id('region-pills'),
         selectLayer: id('select-layer'),
         selectSnowSource: id('select-snow-source'),
-        selectViewMode: id('select-view-mode'),
+        viewModeButtons: id('view-mode-buttons'),
 
         sliderExag: id('slider-exag'),
         valExag: id('val-exag'),
+        planeBlock: id('plane-block'),
         checkPlane: id('check-plane'),
         sliderLevel: id('slider-level'),
         valLevel: id('val-level'),
 
-        checkShowSnow: id('check-show-snow'),
         checkContours: id('check-contours'),
         checkGrid: id('check-grid'),
         checkFrames: id('check-frames'),
@@ -143,6 +144,7 @@ function bindDomElements() {
         legendCategorical: id('legend-categorical'),
         legendContinuousWrap: id('legend-continuous-wrap'),
 
+        thresholdBlock: id('snow-threshold-block'),
         sliderThreshold: id('slider-snow-threshold'),
         valThreshold: id('val-snow-threshold'),
         snowScaleMin: id('snow-scale-min'),
@@ -151,6 +153,7 @@ function bindDomElements() {
 
         topmapCanvas: id('topmap-canvas'),
         topmapReadout: id('topmap-readout'),
+        topmapLegendSnowRow: id('topmap-legend-snow-row'),
         topmapLegendSnow: id('topmap-legend-snow'),
         topmapLegendLevel: id('topmap-legend-level'),
         topmapLegendLevelRow: id('topmap-legend-level-row')
@@ -670,6 +673,7 @@ async function switchModel(objectId) {
         }
 
         applyExaggeration();
+        updatePlaneLock();
 
         if (bsrOverlay) {
             if (obj.globe && !bsrOverlay.tracksData) await bsrOverlay.load();
@@ -722,7 +726,8 @@ function syncUniforms() {
 
     uniforms.uSnowMap.value = obj.snowTex[state.snowSource] || null;
     uniforms.uThreshold.value = state.snowThreshold;
-    uniforms.uSnowOn.value = state.showSnow && !layerIsSnow && uniforms.uSnowMap.value ? 1 : 0;
+    const snowVisible = state.viewMode !== 'relief';
+    uniforms.uSnowOn.value = snowVisible && !layerIsSnow && uniforms.uSnowMap.value ? 1 : 0;
     uniforms.uMode.value = { both: 0, relief: 1, snow: 2 }[state.viewMode] ?? 0;
     uniforms.uContours.value = !obj.globe && state.contours ? 1 : 0;
     uniforms.uPlaneOn.value = !obj.globe && state.planeOn ? 1 : 0;
@@ -749,6 +754,50 @@ function syncUniforms() {
     dom.snowHint.textContent = layerIsSnow
         ? 'На слоях вероятности снега и аномальности снег поверх слоя не рисуется: слой сам его показывает.'
         : 'Области с вероятностью выше порога окрашены цветом снега.';
+}
+
+// --------------------------------------------------------------------------
+// View mode buttons and dependent control blocks
+// --------------------------------------------------------------------------
+function setViewMode(mode) {
+    state.viewMode = mode;
+    updateViewModeUI();
+    syncUniforms();
+    drawTopMap();
+}
+
+/** Highlights the active mode button and (de)activates the snow threshold block. */
+function updateViewModeUI() {
+    dom.viewModeButtons.querySelectorAll('.mode-btn').forEach((btn) => {
+        const on = btn.dataset.mode === state.viewMode;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    const reliefOnly = state.viewMode === 'relief';
+    dom.thresholdBlock.classList.toggle('is-disabled', reliefOnly);
+    dom.thresholdBlock.setAttribute('aria-disabled', reliefOnly ? 'true' : 'false');
+    dom.sliderThreshold.disabled = reliefOnly;
+}
+
+/**
+ * Exaggeration 0 → the snowline plane is switched off and its block is locked;
+ * the level slider keeps its position. Leaving 0 restores the plane at that level.
+ */
+function updatePlaneLock() {
+    const locked = state.exag[state.activeObjectId] === 0;
+    if (locked && !state.planeLocked) {
+        state.planeOnBeforeLock = state.planeOn;
+        state.planeOn = false;
+    } else if (!locked && state.planeLocked) {
+        state.planeOn = state.planeOnBeforeLock;
+    }
+    state.planeLocked = locked;
+
+    dom.checkPlane.checked = state.planeOn;
+    dom.checkPlane.disabled = locked;
+    dom.sliderLevel.disabled = locked;
+    dom.planeBlock.classList.toggle('is-disabled', locked);
+    dom.planeBlock.setAttribute('aria-disabled', locked ? 'true' : 'false');
 }
 
 // --------------------------------------------------------------------------
@@ -1127,9 +1176,8 @@ function initUI() {
     dom.selectLayer.value = state.activeLayerId;
 
     dom.selectSnowSource.value = state.snowSource;
-    dom.selectViewMode.value = state.viewMode;
+    updateViewModeUI();
     dom.sliderThreshold.value = state.snowThreshold;
-    dom.checkShowSnow.checked = state.showSnow;
     dom.checkContours.checked = state.contours;
     dom.checkPlane.checked = state.planeOn;
     dom.checkGrid.checked = state.showGrid;
@@ -1355,7 +1403,8 @@ function drawTopMap() {
 
     // Snow boundary at the threshold
     const snow = obj.snow[state.snowSource];
-    if (snow && state.showSnow) {
+    const snowVisible = state.viewMode !== 'relief';
+    if (snow && snowVisible) {
         const p = new Float32Array(snow.length);
         for (let i = 0; i < snow.length; i++) p[i] = Math.min(snow[i] / GRAY_SCALE, 1);
         ctx.strokeStyle = '#ffffff';
@@ -1400,6 +1449,7 @@ function drawTopMap() {
 
     dom.topmapLegendSnow.textContent = `граница снега, p = ${thr.toFixed(2)}`;
     dom.topmapLegendLevel.textContent = `изолиния снеговой линии, ${state.level.toFixed(2)} км`;
+    dom.topmapLegendSnowRow.style.display = snowVisible ? '' : 'none';
     dom.topmapLegendLevelRow.style.display = state.planeOn ? '' : 'none';
 }
 
@@ -1442,12 +1492,14 @@ function initEventListeners() {
         drawTopMap();
     });
 
-    dom.selectViewMode.addEventListener('change', (e) => {
-        state.viewMode = e.target.value;
-        syncUniforms();
+    dom.viewModeButtons.addEventListener('click', (e) => {
+        const btn = e.target.closest('.mode-btn');
+        if (!btn || btn.dataset.mode === state.viewMode) return;
+        setViewMode(btn.dataset.mode);
     });
 
     dom.sliderThreshold.addEventListener('input', (e) => {
+        if (state.viewMode === 'relief') return;
         state.snowThreshold = parseFloat(e.target.value);
         syncUniforms();
         updateTelemetry();
@@ -1458,11 +1510,18 @@ function initEventListeners() {
         if (!state.activeObjectId) return;
         state.exag[state.activeObjectId] = parseInt(e.target.value, 10);
         dom.valExag.textContent = `${e.target.value}×`;
+        const wasLocked = state.planeLocked;
+        updatePlaneLock();
+        if (wasLocked !== state.planeLocked) {
+            syncUniforms();
+            drawTopMap();
+        }
         scheduleExaggeration();
         updateTelemetry();
     });
 
     dom.checkPlane.addEventListener('change', (e) => {
+        if (state.planeLocked) { e.target.checked = false; return; }
         state.planeOn = e.target.checked;
         syncUniforms();
         updateTelemetry();
@@ -1470,15 +1529,10 @@ function initEventListeners() {
     });
 
     dom.sliderLevel.addEventListener('input', (e) => {
+        if (state.planeLocked) return;
         state.level = parseFloat(e.target.value);
         syncUniforms();
         updateTelemetry();
-        drawTopMap();
-    });
-
-    dom.checkShowSnow.addEventListener('change', (e) => {
-        state.showSnow = e.target.checked;
-        syncUniforms();
         drawTopMap();
     });
 
