@@ -4,6 +4,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Screens narrower than 1200 px get the desktop-only stub instead of the 3D atlas.
+    // The stub can set "venus-force-desktop" to open the atlas anyway with a 1280 px desktop viewport.
+    (function () {
+      var MIN_WIDTH = 1200;
+      var forced = false;
+      try { forced = localStorage.getItem('venus-force-desktop') === '1'; } catch (e) { }
+      var width = window.innerWidth || document.documentElement.clientWidth || 0;
+      if (width >= MIN_WIDTH) return;
+      if (forced) {
+        var vp = document.querySelector('meta[name="viewport"]');
+        if (vp) vp.setAttribute('content', 'width=1280');
+        return;
+      }
+      document.documentElement.style.display = 'none';
+      window.location.replace('desktop-only.html' + window.location.search + window.location.hash);
+    })();
+  </script>
   <title>Атлас Венеры — Исследование металлического снега</title>
   <meta name="description"
     content="Интеллектуальная система анализа металлического снега Венеры по данным КА Магеллан и моделей машинного обучения">
