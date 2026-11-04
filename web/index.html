@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Атлас Венеры — Исследование металлического снега</title>
+  <meta name="description" content="Интеллектуальная система анализа металлического снега Венеры по данным КА Магеллан и моделей машинного обучения">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%230284c7'/><circle cx='38' cy='36' r='18' fill='%23e0f2fe'/></svg>">
+</head>
+<body>
+
+  <!-- ========================================================================
+       3D Viewport
+       ======================================================================== -->
+  <main id="app-viewport">
+    <canvas id="canvas3d"></canvas>
+  </main>
+
+  <!-- ========================================================================
+       Left Main Control Panel (Matches Screenshot 2)
+       ======================================================================== -->
+  <aside class="main-panel">
+    <div class="main-panel-scroll">
+      <!-- Title Section -->
+      <div>
+        <h1 class="panel-title">Интеллектуальная система анализа металлического снега Венеры</h1>
+        <p class="panel-subtitle">Моделирование и динамическая оптимизация отображения фаций рельефа по данным КА «Магеллан» и ML</p>
+      </div>
+
+      <!-- Model Switcher Pills (Like 'Рейс №1', 'Рейс №2') -->
+      <nav class="pills-container" id="region-pills" aria-label="Выбор 3D-модели">
+        <!-- Injected dynamically via app.js -->
+      </nav>
+
+      <!-- Dropdown Selectors Grid -->
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label" for="select-region">РЕГИОН ВЕНЕРЫ</label>
+          <select id="select-region" class="form-select"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="select-layer">РАДАРНЫЙ СЛОЙ</label>
+          <select id="select-layer" class="form-select"></select>
+        </div>
+      </div>
+
+      <!-- Display Mode Select -->
+      <div class="form-group">
+        <label class="form-label" for="select-display-mode">РЕЖИМ ОТОБРАЖЕНИЯ СЕТКИ</label>
+        <select id="select-display-mode" class="form-select">
+          <option value="solid" selected>Сплошная модель (PBR рендер)</option>
+          <option value="overlay">Модель с наложением сетки (Wireframe Overlay)</option>
+          <option value="wireframe">Только полигональная сетка (Pure Wireframe)</option>
+          <option value="points">Облако вершинных точек (Point Cloud)</option>
+        </select>
+      </div>
+
+      <!-- Sliders (Matches Screenshot 2 Slider Style) -->
+      <div class="slider-block">
+        <div class="slider-header">
+          <span class="slider-title">Порог вероятности снега (ML)</span>
+          <span class="slider-value" id="val-snow-threshold">0.77 (Оптимум)</span>
+        </div>
+        <input type="range" id="slider-snow-threshold" min="0.0" max="1.0" step="0.01" value="0.77">
+        <div class="slider-hint">
+          Модель меняется в реальном времени: заснеженные области выше порога окрашиваются металлическим льдом и оконтуриваются сиянием.
+        </div>
+      </div>
+
+      <div class="slider-block">
+        <div class="slider-header">
+          <span class="slider-title">Шероховатость поверхности (Roughness)</span>
+          <span class="slider-value" id="val-roughness">0.82</span>
+        </div>
+        <input type="range" id="slider-roughness" min="0.0" max="1.0" step="0.02" value="0.82">
+      </div>
+
+      <div class="slider-block">
+        <div class="slider-header">
+          <span class="slider-title">Металличность снега (Metalness)</span>
+          <span class="slider-value" id="val-metalness">0.75</span>
+        </div>
+        <input type="range" id="slider-metalness" min="0.0" max="1.0" step="0.02" value="0.75">
+      </div>
+
+      <div class="slider-block">
+        <div class="slider-header">
+          <span class="slider-title">Высота Солнца над горизонтом</span>
+          <span class="slider-value" id="val-sun-elev">50°</span>
+        </div>
+        <input type="range" id="slider-sun-elev" min="5" max="85" step="1" value="50">
+      </div>
+
+      <!-- Checkboxes (Matches Screenshot 2 Checkboxes) -->
+      <div class="checkbox-list">
+        <label class="form-checkbox">
+          <input type="checkbox" id="check-snow-active" checked>
+          <span>ДИНАМИЧЕСКАЯ ПОДСВЕТКА СНЕГА НА 3D-МОДЕЛИ</span>
+        </label>
+        <label class="form-checkbox">
+          <input type="checkbox" id="check-snow-isolate">
+          <span>ИЗОЛЯЦИЯ ЗАСНЕЖЕННЫХ ПИКОВ (СКРЫТЬ НИЗИНЫ)</span>
+        </label>
+        <label class="form-checkbox">
+          <input type="checkbox" id="check-autorotate" checked>
+          <span>АВТОМАТИЧЕСКОЕ ВРАЩЕНИЕ КАМЕРЫ</span>
+        </label>
+        <label class="form-checkbox">
+          <input type="checkbox" id="check-bsr-tracks">
+          <span>ТРЕКИ БИСТАТИЧЕСКОГО РАДАРА (BSR)</span>
+        </label>
+      </div>
+
+      <!-- Primary Action Buttons (Large Blue Button at Bottom) -->
+      <button class="btn-primary" id="btn-export-glb">
+        СКАЧАТЬ МОДЕЛЬ (.GLB)
+      </button>
+
+      <div class="btn-secondary-row">
+        <button class="btn-secondary" id="btn-export-obj">ЭКСПОРТ В .OBJ + .MTL</button>
+        <button class="btn-secondary" id="btn-snapshot">СНИМОК (.PNG)</button>
+      </div>
+
+      <a class="btn-secondary" href="/results/venus_3d_export.zip" download="venus_3d_export.zip">
+        ПОЛНЫЙ ПАКЕТ 3D-МОДЕЛЕЙ (.ZIP, 85 МБ)
+      </a>
+    </div>
+
+    <!-- Panel Footer Copyright (Matches Screenshot 2) -->
+    <div class="panel-footer">
+      <span>© 2026 Василий Гурьянов</span>
+      <span style="font-family: var(--font-mono); font-size: 10px;">Three.js / Magellan GxDR</span>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       Right Floating Card: Legend & Telemetry (Matches Screenshot 2)
+       ======================================================================== -->
+  <aside class="legend-panel">
+    <div class="legend-panel-header">
+      <span>ЛЕГЕНДА КАРТЫ</span>
+      <span class="legend-layer-title" id="legend-title">Высота рельефа</span>
+    </div>
+
+    <div class="legend-bar-container" id="legend-continuous-wrap">
+      <div class="legend-bar" id="legend-bar"></div>
+      <div class="legend-ticks" id="legend-ticks">
+        <span>-2.0 км</span>
+        <span>4.5 км</span>
+        <span>11.3 км</span>
+      </div>
+    </div>
+
+    <div class="legend-categorical" id="legend-categorical" style="display: none;"></div>
+
+    <div class="telemetry-grid">
+      <div class="telemetry-row">
+        <span class="telemetry-label">Текущий объект:</span>
+        <span class="telemetry-value accent" id="legend-region-name">Горы Максвелла</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-label">Диапазон высот:</span>
+        <span class="telemetry-value" id="legend-elev-range">0.0 .. 11.3 км</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-label">Снеговая линия (hc):</span>
+        <span class="telemetry-value" id="legend-snowline">5.51 км</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-label">Расчетная площадь снега:</span>
+        <span class="telemetry-value accent" id="legend-snow-area">534 040 км²</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-label">Сетка (полигоны / вершины):</span>
+        <span class="telemetry-value" id="legend-mesh-stats">43k / 22k</span>
+      </div>
+    </div>
+
+    <button class="btn-info" id="btn-open-info">
+      О НАУЧНОМ ПРОЕКТЕ
+    </button>
+  </aside>
+
+  <!-- ========================================================================
+       Bottom Center Capsule Controller (Matches Screenshot 2)
+       ======================================================================== -->
+  <div class="bottom-timeline">
+    <button class="timeline-play-btn" id="btn-timeline-play" title="Пауза / Вращение камеры">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+    </button>
+    <div class="timeline-slider-wrap">
+      <input type="range" id="slider-sun-azimuth" min="0" max="360" step="2" value="45">
+    </div>
+    <span class="timeline-label" id="val-sun-azimuth">45° Азимут Солнца</span>
+  </div>
+
+  <!-- ========================================================================
+       Loading Progress Overlay
+       ======================================================================== -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">Загрузка 3D-модели Венеры...</div>
+  </div>
+
+  <!-- ========================================================================
+       Science Info Modal
+       ======================================================================== -->
+  <div class="modal-backdrop" id="info-modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Венера: Металлический снег и морфометрия рельефа</div>
+        <button class="modal-close-btn" id="btn-close-modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div>
+          <h3 style="font-size: 13.5px; font-weight: 700; color: var(--primary-blue); margin-bottom: 6px;">
+            1. Физическая природа феномена
+          </h3>
+          <p>
+            На равнинах Венеры температура атмосферы у поверхности достигает 460 °C при давлении около 92 бар. С высотой температура падает по вертикальному градиенту (около 8.5 К/км). На высотах более 3.7 - 5.5 км температура опускается ниже 380 °C, создавая условия конденсации паров халькогенидов и тяжелых металлов (теллур, висмут, сульфид висмута, галенит).
+          </p>
+          <p style="margin-top: 6px;">
+            Образующийся на высокогорьях проводящий полупроводниковый налет («металлический снег») вызывает резкое падение радиоизлучательной способности (до e &lt; 0.5) и колоссальный рост диэлектрической проницаемости (до eps &gt; 30-50), ярко проявляясь на радарных изображениях КА «Магеллан».
+          </p>
+        </div>
+
+        <div>
+          <h3 style="font-size: 13.5px; font-weight: 700; color: var(--primary-blue); margin-bottom: 6px;">
+            2. Сравнительные параметры ключевых регионов
+          </h3>
+          <div style="overflow-x: auto; border: 1px solid var(--border-card); border-radius: var(--radius-md);">
+            <table class="science-table">
+              <thead>
+                <tr>
+                  <th>Регион</th>
+                  <th>Макс. высота</th>
+                  <th>Снеговая линия (hc)</th>
+                  <th>Перепад de</th>
+                  <th>Площадь снега</th>
+                  <th>Доля региона</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Горы Максвелла</strong></td>
+                  <td>11.29 км</td>
+                  <td>5.51 +- 0.01 км</td>
+                  <td>0.381</td>
+                  <td>534 040 км²</td>
+                  <td>52.7 %</td>
+                </tr>
+                <tr>
+                  <td><strong>Область Овда</strong></td>
+                  <td>6.19 км</td>
+                  <td>3.88 +- 0.005 км</td>
+                  <td>0.369</td>
+                  <td>4 490 630 км²</td>
+                  <td>43.0 %</td>
+                </tr>
+                <tr>
+                  <td><strong>Область Тетис</strong></td>
+                  <td>7.14 км</td>
+                  <td>3.76 +- 0.005 км</td>
+                  <td>0.305</td>
+                  <td>3 099 685 км²</td>
+                  <td>35.7 %</td>
+                </tr>
+                <tr>
+                  <td><strong>Область Бета</strong></td>
+                  <td>6.56 км</td>
+                  <td>4.26 +- 0.012 км</td>
+                  <td>0.347</td>
+                  <td>1 062 123 км²</td>
+                  <td>21.1 %</td>
+                </tr>
+                <tr>
+                  <td><strong>Область Атла (Маат)</strong></td>
+                  <td>9.66 км</td>
+                  <td>3.74 +- 0.015 км</td>
+                  <td>0.201</td>
+                  <td>1 289 156 км²</td>
+                  <td>21.4 %</td>
+                </tr>
+                <tr>
+                  <td><strong>Гора Гула</strong></td>
+                  <td>4.63 км</td>
+                  <td>3.78 +- 0.078 км</td>
+                  <td>0.313</td>
+                  <td>33 341 км²</td>
+                  <td>1.7 %</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border-card); padding-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+          <span>Автор исследования: Василий Гурьянов</span>
+          <span>Three.js WebGL Engine</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript Application Module -->
+  <script type="module" src="/js/app.js"></script>
+
+</body>
+</html>
