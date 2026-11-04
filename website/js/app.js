@@ -247,7 +247,7 @@ function initThreeScene() {
 // --------------------------------------------------------------------------
 async function loadManifest() {
     try {
-        const resp = await fetch('/api/regions');
+        const resp = await fetch('/data/regions.json')
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         state.manifest = await resp.json();
     } catch (err) {
