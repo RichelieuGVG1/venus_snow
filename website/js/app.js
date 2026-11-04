@@ -744,7 +744,7 @@ function syncUniforms() {
 
     dom.valLevel.textContent = `${state.level.toFixed(1)} км`;
     const thr = state.snowThreshold;
-    dom.valThreshold.textContent = Math.abs(thr - DEFAULT_THRESHOLD) < 1e-6 ? `${thr.toFixed(2)} (оптимум)` : thr.toFixed(2);
+    dom.valThreshold.textContent = thr.toFixed(2);
     dom.snowScaleMin.textContent = `p = ${thr.toFixed(2)}`;
     dom.snowHint.textContent = layerIsSnow
         ? 'На слоях вероятности снега и аномальности снег поверх слоя не рисуется: слой сам его показывает.'
@@ -1030,27 +1030,64 @@ function latLonToVec(latDeg, lonDeg, r) {
 
 function buildRegionFrames(obj, group) {
     const exag = state.exag[obj.meta.id];
-    const lift = 0.0008 + exag * 1.5e-5;
-    const onSurface = (la, lo, extra = 0) => latLonToVec(la, lo, globeSurfaceRadius(obj, la, lo) + lift + extra);
+    // Gap between the relief and the frames: a fixed part plus ~1 km of
+    // exaggerated height, so frames rise together with the relief
+    const clearance = 0.004 + exag * 1.0 / R_KM;
     const color = cssVar('--frame-line', '#0284c7');
     const lineMat = new THREE.LineBasicMaterial({ color: new THREE.Color(color) });
+    const step = 0.1;          // sampling along the edges, degrees (finer than mesh cells)
+    const envelope = 8;        // ± samples (≈ ±0.8°) used for the upper envelope
+
+    // Points along a lat/lon polyline; each point is lifted above the highest
+    // relief nearby, so the line never dips into valleys or cuts through peaks
+    const drapedEdge = (from, to) => {
+        const n = Math.max(2, Math.ceil(Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1])) / step));
+        const ll = [], rad = [];
+        for (let i = 0; i <= n; i++) {
+            const la = from[0] + (to[0] - from[0]) * i / n;
+            const lo = from[1] + (to[1] - from[1]) * i / n;
+            ll.push([la, lo]);
+            rad.push(globeSurfaceRadius(obj, la, lo));
+        }
+        return ll.map(([la, lo], i) => {
+            let rMax = rad[i];
+            for (let k = Math.max(0, i - envelope); k <= Math.min(n, i + envelope); k++) rMax = Math.max(rMax, rad[k]);
+            return latLonToVec(la, lo, rMax + clearance);
+        });
+    };
+
+    // Highest relief inside a lat/lon box
+    const maxRadiusIn = (lat, lon) => {
+        let rMax = 1;
+        for (let la = lat[0]; la <= lat[1] + 1e-9; la += 0.25) {
+            for (let lo = lon[0]; lo <= lon[1] + 1e-9; lo += 0.25) {
+                rMax = Math.max(rMax, globeSurfaceRadius(obj, la, lo));
+            }
+        }
+        return rMax;
+    };
 
     state.manifest.objects.filter((o) => !isGlobe(o) && o.bounds).forEach((o) => {
         const { lat, lon } = o.bounds;
-        // Frames are draped over the relief, sampled finer than the mesh cells
+        const corners = [[lat[1], lon[0]], [lat[1], lon[1]], [lat[0], lon[1]], [lat[0], lon[0]], [lat[1], lon[0]]];
         const pts = [];
-        const nLon = Math.max(2, Math.ceil((lon[1] - lon[0]) / 0.1));
-        const nLat = Math.max(2, Math.ceil((lat[1] - lat[0]) / 0.1));
-        for (let i = 0; i <= nLon; i++) pts.push(onSurface(lat[1], lon[0] + (lon[1] - lon[0]) * i / nLon));
-        for (let i = 1; i <= nLat; i++) pts.push(onSurface(lat[1] - (lat[1] - lat[0]) * i / nLat, lon[1]));
-        for (let i = 1; i <= nLon; i++) pts.push(onSurface(lat[0], lon[1] - (lon[1] - lon[0]) * i / nLon));
-        for (let i = 1; i <= nLat; i++) pts.push(onSurface(lat[0] + (lat[1] - lat[0]) * i / nLat, lon[0]));
+        for (let e = 0; e < 4; e++) {
+            const edge = drapedEdge(corners[e], corners[e + 1]);
+            pts.push(...(e === 0 ? edge : edge.slice(1)));
+        }
         const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat.clone());
         line.renderOrder = 3;
         group.add(line);
 
+        // Label north of the frame, above both the region's highest peak and the relief under it
+        const labelLat = Math.min(lat[1] + 2.5, 89);
+        const labelLon = (lon[0] + lon[1]) / 2;
+        const rLabel = Math.max(
+            maxRadiusIn(lat, lon),
+            maxRadiusIn([labelLat - 1.5, labelLat + 0.5], [labelLon - 4, labelLon + 4])
+        ) + clearance + 0.025;
         const label = makeLabel(o.name, 0.05, color, { bold: true });
-        label.position.copy(onSurface(lat[1] + 2.5, (lon[0] + lon[1]) / 2, 0.03));
+        label.position.copy(latLonToVec(labelLat, labelLon, rLabel));
         group.add(label);
     });
     lineMat.dispose();
