@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="https://pds.nasa.gov/pds4/pds/v1/PDS4_PDS_1K00.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?>
+<?xml-model href="https://pds.nasa.gov/pds4/mission/mgn/v1/PDS4_MGN_1K00_1000.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?>
+<?xml-model href="https://pds.nasa.gov/pds4/disp/v1/PDS4_DISP_1K00_1510.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?>
+<?xml-model href="https://pds.nasa.gov/pds4/cart/v1/PDS4_CART_1K00_1970.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?>
+ 
+<Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1"
+  xmlns:mgn="http://pds.nasa.gov/pds4/mission/mgn/v1"
+  xmlns:disp="http://pds.nasa.gov/pds4/disp/v1"
+  xmlns:cart="http://pds.nasa.gov/pds4/cart/v1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://pds.nasa.gov/pds4/pds/v1 https://pds.nasa.gov/pds4/pds/v1/PDS4_PDS_1K00.xsd
+     http://pds.nasa.gov/pds4/mission/mgn/v1 https://pds.nasa.gov/pds4/mission/mgn/v1/PDS4_MGN_1K00_1000.xsd
+     http://pds.nasa.gov/pds4/disp/v1 https://pds.nasa.gov/pds4/disp/v1/PDS4_DISP_1K00_1510.xsd
+     http://pds.nasa.gov/pds4/cart/v1 https://pds.nasa.gov/pds4/cart/v1/PDS4_CART_1K00_1970.xsd">
+ 
+  <Identification_Area>
+    <logical_identifier>urn:nasa:pds:magellan_gxdr:data:gsdr_sinus</logical_identifier>
+    <version_id>1.0</version_id>
+    <title>Magellen GXDR Sinusoidal slope map: gsdr_sinus</title>
+    <information_model_version>1.20.0.0</information_model_version>
+    <product_class>Product_Observational</product_class>
+  </Identification_Area>
+  <Observation_Area>
+    <Time_Coordinates>
+       <start_date_time xsi:nil="true" nilReason="unknown"></start_date_time>
+       <stop_date_time xsi:nil="true" nilReason="unknown"></stop_date_time>
+    </Time_Coordinates>
+    <Investigation_Area>
+       <name>Magellan</name>
+       <type>Mission</type>
+       <Internal_Reference>
+          <lid_reference>urn:nasa:pds:context:investigation:mission.magellan</lid_reference>
+          <reference_type>data_to_investigation</reference_type>
+       </Internal_Reference>
+    </Investigation_Area>
+    <Observing_System>
+      <Observing_System_Component>
+        <name>Magellan</name>
+        <type>Host</type>
+        <Internal_Reference>
+          <lid_reference>urn:nasa:pds:context:instrument_host:spacecraft.mgn</lid_reference>
+          <reference_type>is_instrument_host</reference_type>
+        </Internal_Reference>
+      </Observing_System_Component>
+      <Observing_System_Component>
+        <name>Radar System for Magellan</name>
+        <type>Instrument</type>
+        <Internal_Reference>
+          <lid_reference>urn:nasa:pds:context:instrument:mgn.rdrs</lid_reference>
+          <reference_type>is_instrument</reference_type>
+        </Internal_Reference>
+      </Observing_System_Component>
+    </Observing_System>
+    <Target_Identification>
+      <name>Venus</name>
+      <type>Planet</type>
+      <Internal_Reference>
+        <lid_reference>urn:nasa:pds:context:target:planet.venus</lid_reference>
+        <reference_type>data_to_target</reference_type>
+      </Internal_Reference>
+    </Target_Identification>
+  
+    <Mission_Area>
+      <mgn:Magellan_Parameters>
+        <mgn:product_type>GSDR</mgn:product_type>
+        <mgn:original_pds_volume_id>mg_3002</mgn:original_pds_volume_id>
+      </mgn:Magellan_Parameters>
+    </Mission_Area>
+  
+    <Discipline_Area>
+      <disp:Display_Settings>
+        <Local_Internal_Reference>
+          <local_identifier_reference>Image</local_identifier_reference>
+          <local_reference_type>display_settings_to_array</local_reference_type>
+        </Local_Internal_Reference>
+        <disp:Display_Direction>
+          <disp:horizontal_display_axis>Sample</disp:horizontal_display_axis>
+          <disp:horizontal_display_direction>Left to Right</disp:horizontal_display_direction>
+          <disp:vertical_display_axis>Line</disp:vertical_display_axis>
+          <disp:vertical_display_direction>Top to Bottom</disp:vertical_display_direction>
+        </disp:Display_Direction>
+      </disp:Display_Settings>
+  
+      <cart:Cartography>
+        <Local_Internal_Reference>
+          <local_identifier_reference>Image</local_identifier_reference>
+          <local_reference_type>cartography_parameters_to_image_object</local_reference_type>
+        </Local_Internal_Reference>
+        <cart:Spatial_Domain>
+          <cart:Bounding_Coordinates>
+            <cart:west_bounding_coordinate unit="deg">-180.00</cart:west_bounding_coordinate>
+            <cart:east_bounding_coordinate unit="deg">180.00</cart:east_bounding_coordinate>
+            <cart:north_bounding_coordinate unit="deg">90.00</cart:north_bounding_coordinate>
+            <cart:south_bounding_coordinate unit="deg">-90.00</cart:south_bounding_coordinate>
+          </cart:Bounding_Coordinates>
+        </cart:Spatial_Domain>
+        <cart:Spatial_Reference_Information>
+          <cart:Horizontal_Coordinate_System_Definition>
+            <cart:Planar>
+              <cart:Map_Projection>
+                <cart:map_projection_name>Sinusoidal</cart:map_projection_name>
+                <cart:Sinusoidal>
+                  <cart:longitude_of_central_meridian unit="deg">0.00</cart:longitude_of_central_meridian>
+                  <cart:latitude_of_projection_origin unit="deg">0.00</cart:latitude_of_projection_origin>
+                </cart:Sinusoidal>
+              </cart:Map_Projection>
+              <cart:Planar_Coordinate_Information>
+                <cart:planar_coordinate_encoding_method>Coordinate Pair</cart:planar_coordinate_encoding_method>
+                <cart:Coordinate_Representation>
+                  <cart:pixel_resolution_x unit="m/pixel">4641.0589</cart:pixel_resolution_x>
+                  <cart:pixel_resolution_y unit="m/pixel">4641.0589</cart:pixel_resolution_y>
+                  <cart:pixel_scale_x unit="pixel/deg">22.7556</cart:pixel_scale_x>
+                  <cart:pixel_scale_y unit="pixel/deg">22.7556</cart:pixel_scale_y>
+                </cart:Coordinate_Representation>
+              </cart:Planar_Coordinate_Information>
+              <cart:Geo_Transformation>
+                <cart:upperleft_corner_x unit="km">-190009.7773</cart:upperleft_corner_x>
+                <cart:upperleft_corner_y unit="km">9504.8886</cart:upperleft_corner_y>
+              </cart:Geo_Transformation>
+            </cart:Planar>
+            <cart:Geodetic_Model>
+              <cart:latitude_type>Planetocentric</cart:latitude_type>
+              <cart:a_axis_radius unit="km">6051.00</cart:a_axis_radius>
+              <cart:b_axis_radius unit="km">6051.00</cart:b_axis_radius>
+              <cart:c_axis_radius unit="km">6051.00</cart:c_axis_radius>
+              <cart:longitude_direction>Positive East</cart:longitude_direction>
+            </cart:Geodetic_Model>
+          </cart:Horizontal_Coordinate_System_Definition>
+        </cart:Spatial_Reference_Information>
+      </cart:Cartography>
+    </Discipline_Area>
+  </Observation_Area>
+  <File_Area_Observational>
+    <File>
+      <file_name>gsdr_sinus.img</file_name>
+      <creation_date_time>2022-04-26</creation_date_time>
+      <comment>
+        Global slope map of Venus in Sinusoidal projection.
+        DN = ((SLOPE [DEGREES]) * 10.0) + 1.
+      </comment>
+    </File>
+    <Array_2D_Image>
+      <local_identifier>Image</local_identifier>
+      <offset unit="byte">0</offset>
+      <axes>2</axes>
+      <axis_index_order>Last Index Fastest</axis_index_order>
+      <Element_Array>
+        <data_type>UnsignedByte</data_type>
+        <unit>deg</unit>
+        <scaling_factor>0.1</scaling_factor>
+        <value_offset>-0.1</value_offset>
+      </Element_Array>
+      <Axis_Array>
+        <axis_name>Line</axis_name>
+        <elements>4096</elements>
+        <sequence_number>1</sequence_number>
+      </Axis_Array>
+      <Axis_Array>
+        <axis_name>Sample</axis_name>
+        <elements>8192</elements>
+        <sequence_number>2</sequence_number>
+      </Axis_Array>
+    </Array_2D_Image>
+  </File_Area_Observational>
+  <File_Area_Observational_Supplemental>
+    <File>
+      <file_name>gsdr_sinus.hdr</file_name>
+    </File>
+    <Stream_Text>
+      <offset unit="byte">0</offset>
+      <parsing_standard_id>7-Bit ASCII Text</parsing_standard_id>
+      <description>ENVI header file</description>
+      <record_delimiter>Carriage-Return Line-Feed</record_delimiter>
+    </Stream_Text>
+  </File_Area_Observational_Supplemental>
+</Product_Observational>

@@ -1,0 +1,23 @@
+{
+  "best_classifier": "HistGB",
+  "threshold": 0.768578851718392,
+  "classifier_metrics": {
+    "pr-auc": 0.88,
+    "pr-auc σ": 0.2257,
+    "roc-auc": 0.9961,
+    "roc-auc σ": 0.0016,
+    "f1": 0.944,
+    "точность": 0.9458,
+    "полнота": 0.9421,
+    "mcc": 0.9299,
+    "сбалансированная точность": 0.9643,
+    "brier": 0.0209,
+    "порог": 0.7686
+  },
+  "best_anomaly_detector": "EllipticEnvelope",
+  "snow_area_km2": 12514794.52074514,
+  "label_rule": {
+    "emis_anom_below": -0.07249932736158371,
+    "min_elev_km": 2.0
+  }
+}
