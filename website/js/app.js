@@ -669,12 +669,14 @@ async function switchModel(objectId) {
             dom.sliderLevel.value = state.level;
         }
 
+        applyExaggeration();
+
         if (bsrOverlay) {
             if (obj.globe && !bsrOverlay.tracksData) await bsrOverlay.load();
+            if (obj.globe) bsrOverlay.setSurfaceFunction((la, lo) => globeSurfaceRadius(obj, la, lo));
             bsrOverlay.setVisible(obj.globe && state.bsrVisible);
         }
 
-        applyExaggeration();
         syncUniforms();
         rebuildOverlays();
         fitCameraToObject(obj);
@@ -785,10 +787,69 @@ function applyExaggeration() {
         geo.attributes.position.needsUpdate = true;
         geo.computeVertexNormals();
         geo.computeBoundingSphere();
+
+        // BSR tracks follow the new relief; the gap above it grows a little
+        // with the exaggeration so steep slopes never poke through the line
+        if (bsrOverlay) {
+            bsrOverlay.lift = 0.0006 + exag * 1.5e-5;
+            if (bsrOverlay.tracksData && bsrOverlay.surfaceRadius) bsrOverlay.buildGeometry();
+        }
     } else {
         // Regions: Y = height × exaggeration → scale the terrain group vertically
         obj.terrainGroup.scale.y = exag / obj.baseExag;
     }
+}
+
+// --------------------------------------------------------------------------
+// Relief radius of the globe at any (lat, lon)
+// --------------------------------------------------------------------------
+/**
+ * The globe mesh is a regular lat/lon grid: rows from north to south, columns
+ * from 180°W eastwards with the seam column duplicated, cells split by the
+ * diagonal top-right → bottom-left (as in venus_globe.glb). The radius is
+ * interpolated on the same triangles the GPU draws, so whatever lies at this
+ * radius sits exactly on the visible surface.
+ */
+function globeGridInfo(obj) {
+    if (obj.grid) return obj.grid;
+    const uv = obj.mesh.geometry.attributes.uv;
+    let cols = 1;
+    while (cols < uv.count && Math.abs(uv.getY(cols) - uv.getY(0)) < 1e-7) cols++;
+    const rows = Math.round(uv.count / cols);
+    obj.grid = {
+        rows,
+        cols,
+        lat0: 90 - uv.getY(0) * 180,         // latitude of row 0
+        lon0: uv.getX(0) * 360 - 180,        // longitude of column 0
+        dLat: 180 / rows,
+        dLon: 360 / (cols - 1)
+    };
+    return obj.grid;
+}
+
+function globeSurfaceRadius(obj, latDeg, lonDeg) {
+    const g = globeGridInfo(obj);
+    const pos = obj.mesh.geometry.attributes.position.array;
+    const radiusAt = (r, c) => {
+        const i = (r * g.cols + c) * 3;
+        return Math.hypot(pos[i], pos[i + 1], pos[i + 2]);
+    };
+
+    let fy = (g.lat0 - latDeg) / g.dLat;
+    fy = Math.max(0, Math.min(g.rows - 1 - 1e-6, fy));
+    let fx = (lonDeg - g.lon0) / g.dLon;
+    const period = g.cols - 1;
+    fx = ((fx % period) + period) % period;
+
+    const r = Math.min(Math.floor(fy), g.rows - 2);
+    const c = Math.min(Math.floor(fx), g.cols - 2);
+    const ty = fy - r, tx = fx - c;
+
+    const tl = radiusAt(r, c), tr = radiusAt(r, c + 1);
+    const bl = radiusAt(r + 1, c), br = radiusAt(r + 1, c + 1);
+    // Triangles (TL, BL, TR) and (TR, BL, BR)
+    if (tx + ty <= 1) return tl + (tr - tl) * tx + (bl - tl) * ty;
+    return br + (bl - br) * (1 - tx) + (tr - br) * (1 - ty);
 }
 
 // --------------------------------------------------------------------------
@@ -969,24 +1030,27 @@ function latLonToVec(latDeg, lonDeg, r) {
 
 function buildRegionFrames(obj, group) {
     const exag = state.exag[obj.meta.id];
-    const r = 1 + 12 * exag / R_KM + 0.002;   // just above the highest peak, as in the reference
+    const lift = 0.0008 + exag * 1.5e-5;
+    const onSurface = (la, lo, extra = 0) => latLonToVec(la, lo, globeSurfaceRadius(obj, la, lo) + lift + extra);
     const color = cssVar('--frame-line', '#0284c7');
     const lineMat = new THREE.LineBasicMaterial({ color: new THREE.Color(color) });
 
     state.manifest.objects.filter((o) => !isGlobe(o) && o.bounds).forEach((o) => {
         const { lat, lon } = o.bounds;
+        // Frames are draped over the relief, sampled finer than the mesh cells
         const pts = [];
-        const n = 40;
-        for (let i = 0; i <= n; i++) pts.push(latLonToVec(lat[1], lon[0] + (lon[1] - lon[0]) * i / n, r));
-        for (let i = 1; i <= n; i++) pts.push(latLonToVec(lat[1] - (lat[1] - lat[0]) * i / n, lon[1], r));
-        for (let i = 1; i <= n; i++) pts.push(latLonToVec(lat[0], lon[1] - (lon[1] - lon[0]) * i / n, r));
-        for (let i = 1; i <= n; i++) pts.push(latLonToVec(lat[0] + (lat[1] - lat[0]) * i / n, lon[0], r));
+        const nLon = Math.max(2, Math.ceil((lon[1] - lon[0]) / 0.1));
+        const nLat = Math.max(2, Math.ceil((lat[1] - lat[0]) / 0.1));
+        for (let i = 0; i <= nLon; i++) pts.push(onSurface(lat[1], lon[0] + (lon[1] - lon[0]) * i / nLon));
+        for (let i = 1; i <= nLat; i++) pts.push(onSurface(lat[1] - (lat[1] - lat[0]) * i / nLat, lon[1]));
+        for (let i = 1; i <= nLon; i++) pts.push(onSurface(lat[0], lon[1] - (lon[1] - lon[0]) * i / nLon));
+        for (let i = 1; i <= nLat; i++) pts.push(onSurface(lat[0] + (lat[1] - lat[0]) * i / nLat, lon[0]));
         const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat.clone());
         line.renderOrder = 3;
         group.add(line);
 
         const label = makeLabel(o.name, 0.05, color, { bold: true });
-        label.position.copy(latLonToVec(lat[1] + 2.5, (lon[0] + lon[1]) / 2, r + 0.02));
+        label.position.copy(onSurface(lat[1] + 2.5, (lon[0] + lon[1]) / 2, 0.03));
         group.add(label);
     });
     lineMat.dispose();
