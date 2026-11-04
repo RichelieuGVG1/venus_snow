@@ -50,6 +50,11 @@
 
   --table-header-bg: #f8fafc;
   --table-row-border: #f1f5f9;
+
+  --grid-line: #0f172a;
+  --grid-line-opacity: 0.28;
+  --grid-label: #334155;
+  --frame-line: #0284c7;
 }
 
 /* --------------------------------------------------------------------------
@@ -98,6 +103,11 @@
 
   --table-header-bg: #1e2230;
   --table-row-border: #2a2f3e;
+
+  --grid-line: #e2e8f0;
+  --grid-line-opacity: 0.3;
+  --grid-label: #cbd5e1;
+  --frame-line: #7fd8e6;
 }
 
 /* --------------------------------------------------------------------------
@@ -113,14 +123,17 @@
   --radius-full: 9999px;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -182,10 +195,21 @@ html, body {
   background: var(--primary-blue-soft);
 }
 
-[data-theme="light"] .theme-icon-sun { display: none; }
-[data-theme="light"] .theme-icon-moon { display: block; }
-[data-theme="dark"] .theme-icon-sun { display: block; }
-[data-theme="dark"] .theme-icon-moon { display: none; }
+[data-theme="light"] .theme-icon-sun {
+  display: none;
+}
+
+[data-theme="light"] .theme-icon-moon {
+  display: block;
+}
+
+[data-theme="dark"] .theme-icon-sun {
+  display: block;
+}
+
+[data-theme="dark"] .theme-icon-moon {
+  display: none;
+}
 
 /* --------------------------------------------------------------------------
    Left Floating Control Panel
@@ -276,10 +300,9 @@ html, body {
 }
 
 .model-pill {
-  flex: 1 1 calc(25% - 4px);
-  min-width: 68px;
+  flex: 1 1 auto;
   text-align: center;
-  padding: 7px 6px;
+  padding: 7px 10px;
   font-size: 11px;
   font-weight: 500;
   border: none;
@@ -519,7 +542,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
   position: absolute;
   top: 20px;
   right: 24px;
-  width: 300px;
+  width: 340px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   max-width: calc(100vw - 48px);
   background: var(--bg-card);
   border-radius: var(--radius-lg);
@@ -626,65 +651,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 /* --------------------------------------------------------------------------
-   Bottom Center Timeline Controller
-   -------------------------------------------------------------------------- */
-.bottom-timeline {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--timeline-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-card);
-  box-shadow: var(--shadow-floating);
-  padding: 7px 16px;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  pointer-events: auto;
-}
-
-.timeline-play-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--primary-blue);
-  border: none;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  flex-shrink: 0;
-}
-
-.timeline-play-btn:hover {
-  background: var(--primary-blue-hover);
-}
-
-.timeline-play-btn.paused {
-  background: var(--text-muted);
-}
-
-.timeline-slider-wrap {
-  width: 160px;
-  display: flex;
-  align-items: center;
-}
-
-.timeline-label {
-  font-size: 10.5px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-/* --------------------------------------------------------------------------
    Loading Progress Overlay
    -------------------------------------------------------------------------- */
 .loading-overlay {
@@ -720,7 +686,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
@@ -840,6 +808,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   .main-panel {
     width: 340px;
   }
+
   .legend-panel {
     display: none;
   }
@@ -852,4 +821,112 @@ input[type="range"]::-webkit-slider-thumb:hover {
     top: 8px;
     bottom: 8px;
   }
+}
+
+/* --------------------------------------------------------------------------
+   Scope helpers: controls that only apply to the globe or to regions
+   -------------------------------------------------------------------------- */
+body.scope-globe [data-scope="region"],
+body.scope-region [data-scope="globe"] {
+  display: none !important;
+}
+
+.form-checkbox-inline {
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+/* Scrollbar for the legend panel */
+.legend-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.legend-panel::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
+
+/* Snow colour scale under the threshold slider */
+.legend-snow-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.legend-snow-bar {
+  background: linear-gradient(90deg, #ff2d95, #ff8fcf, #ffd6ef, #ffffff);
+  border: 1px solid var(--border-card);
+}
+
+/* Telemetry rows can wrap long labels */
+.telemetry-row {
+  gap: 10px;
+}
+
+.telemetry-row .telemetry-value {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Top-down map under the legend
+   -------------------------------------------------------------------------- */
+.topmap-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topmap-wrap {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 6px;
+}
+
+#topmap-canvas {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+}
+
+#topmap-readout {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.topmap-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.topmap-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topmap-line {
+  width: 26px;
+  flex-shrink: 0;
+  border-top-width: 2px;
+}
+
+.topmap-line-snow {
+  border-top-style: solid;
+  border-top-color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35);
+}
+
+.topmap-line-level {
+  border-top-style: dashed;
+  border-top-color: #4fc3f7;
 }
