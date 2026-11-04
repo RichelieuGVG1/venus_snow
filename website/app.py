@@ -317,7 +317,7 @@ def main():
     args = parser.parse_args()
 
     port = args.port
-    actual_port = find_free_port(port)
+    actual_port = 8000#find_free_port(port)
 
     server_address = (args.host, actual_port)
     httpd = ThreadedHTTPServer(server_address, VenusAtlasHandler)

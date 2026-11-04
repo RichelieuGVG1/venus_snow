@@ -31,7 +31,7 @@ const SNOW_RAMP = ['#ff2d95', '#ff8fcf', '#ffd6ef', '#ffffff'];   // p = thresho
 const LEVEL_COLOR = '#4fc3f7';
 const EXAG_RANGES = {
     globe: { min: 0, max: 120, step: 5 },
-    region: { min: 1, max: 60, step: 5 }
+    region: { min: 0, max: 60, step: 5 }
 };
 
 // --------------------------------------------------------------------------
