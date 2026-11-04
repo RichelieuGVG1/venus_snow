@@ -1015,12 +1015,14 @@ body.scope-region [data-scope="globe"] {
    Inactive control block: faded, "not-allowed" cursor over the whole block.
    Children ignore the pointer so the block's own cursor always shows.
    -------------------------------------------------------------------------- */
-.slider-block.is-disabled {
+.slider-block.is-disabled,
+.form-group.is-disabled {
   opacity: 0.45;
   cursor: not-allowed;
   user-select: none;
 }
 
-.slider-block.is-disabled * {
+.slider-block.is-disabled *,
+.form-group.is-disabled * {
   pointer-events: none;
 }

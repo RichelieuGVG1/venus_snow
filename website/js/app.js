@@ -115,6 +115,7 @@ function bindDomElements() {
 
         regionPills: id('region-pills'),
         selectLayer: id('select-layer'),
+        snowSourceBlock: id('snow-source-block'),
         selectSnowSource: id('select-snow-source'),
         viewModeButtons: id('view-mode-buttons'),
 
@@ -777,6 +778,9 @@ function updateViewModeUI() {
     dom.thresholdBlock.classList.toggle('is-disabled', reliefOnly);
     dom.thresholdBlock.setAttribute('aria-disabled', reliefOnly ? 'true' : 'false');
     dom.sliderThreshold.disabled = reliefOnly;
+    dom.snowSourceBlock.classList.toggle('is-disabled', reliefOnly);
+    dom.snowSourceBlock.setAttribute('aria-disabled', reliefOnly ? 'true' : 'false');
+    dom.selectSnowSource.disabled = reliefOnly;
 }
 
 /**
@@ -1272,7 +1276,7 @@ function updateTelemetry() {
     } else {
         rows.push(['регион', meta.name, true]);
         rows.push(['максимальная высота', `${fmtNum((meta.height_range_km || [0, 0])[1], 2)} км`]);
-        rows.push(['снеговая линия h_c', meta.snowline_km != null ? `${fmtNum(meta.snowline_km, 2)} км` : 'не выделена']);
+        rows.push(['оригинальная линия снега h_c', meta.snowline_km != null ? `${fmtNum(meta.snowline_km, 2)} км` : 'не выделена']);
         rows.push([`площадь снега при p ≥ ${thr.toFixed(2)} (${srcLabel})`, `${fmtNum(Math.round(snowArea))} км²`]);
         rows.push(['доля региона под снегом', `${fmtNum(100 * snowArea / Math.max(obj.totalArea, 1), 2)} %`]);
 
@@ -1486,6 +1490,7 @@ function initEventListeners() {
     });
 
     dom.selectSnowSource.addEventListener('change', (e) => {
+        if (state.viewMode === 'relief') return;
         state.snowSource = e.target.value;
         syncUniforms();
         updateTelemetry();
