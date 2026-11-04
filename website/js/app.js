@@ -1,10 +1,14 @@
 /**
  * Venus 3D Interactive Atlas — Main Application
  * ---------------------------------------------
- * Three.js WebGL Engine, GLTF Loader, Dynamic Snowline Shader,
- * Wavefront OBJ/GLB Exporter, and Telemetry HUD.
+ * Three.js WebGL engine: globe and regional relief models, real-time snow
+ * shader (threshold / source / display mode), relief exaggeration,
+ * isolines, snowline plane, coordinate grids, region frames on the globe,
+ * a top-down map of the active region and light/dark themes.
  *
- * Theme: Light Clean Style (Matches Screenshot 2)
+ * The behaviour mirrors the reference Plotly pages in
+ * venus_snow/results/export_3d/*.html.
+ *
  * Author: Vasiliy Guryanov
  */
 
@@ -14,44 +18,71 @@ import { GLTFLoader } from '/vendor/GLTFLoader.js';
 import { OBJExporter } from './obj_exporter.js';
 import { BSROverlay } from './bsr_overlay.js';
 
-// Application State
-const state = {
-    manifest: null,
-    summary: null,
-    activeObjectId: 'globe',
-    activeLayerId: 'elev',
-    activeModelData: null,
-    activeMesh: null,
-    loadedTextures: {},
-    snowThreshold: 0.77,
-    snowOverlayEnabled: true,
-    snowIsolate: false,
-    material: {
-        roughness: 0.82,
-        metalness: 0.75,
-        displayMode: 'solid'
-    },
-    lighting: {
-        azimuth: 45,
-        elevation: 50,
-        sunIntensity: 2.2,
-        ambientIntensity: 0.8
-    },
-    camera: {
-        autoRotate: true,
-        rotateSpeed: 0.5
-    },
-    bsrVisible: false
+// --------------------------------------------------------------------------
+// Constants
+// --------------------------------------------------------------------------
+const R_KM = 6051.0;                         // Venus radius, km
+const KM_PER_DEG = R_KM * Math.PI / 180;     // ≈ 105.61 km per degree
+const GRAY_SCALE = 254;                      // probability = pixel / 254 (as in the reference pages)
+const DEFAULT_THRESHOLD = 0.77;
+const LAYER_ORDER = ['elev', 'snow_prob', 'anomaly', 'cluster', 'emis', 'eps_refl', 'refl_norm', 'slope'];
+const SNOW_SOURCES = { snow_prob: 'snow_prob_gray', anomaly: 'anomaly_gray' };
+const SNOW_RAMP = ['#ff2d95', '#ff8fcf', '#ffd6ef', '#ffffff'];   // p = threshold … 1
+const LEVEL_COLOR = '#4fc3f7';
+const EXAG_RANGES = {
+    globe: { min: 0, max: 120, step: 5 },
+    region: { min: 1, max: 30, step: 1 }
 };
 
-// Three.js Core Objects
-let scene, camera, renderer, controls, sunLight, ambientLight;
+// --------------------------------------------------------------------------
+// Application state
+// --------------------------------------------------------------------------
+const state = {
+    manifest: null,
+    activeObjectId: null,
+    activeLayerId: 'elev',
+    snowSource: 'snow_prob',
+    snowThreshold: DEFAULT_THRESHOLD,
+    showSnow: true,
+    viewMode: 'both',            // both | relief | snow
+    contours: true,
+    planeOn: true,
+    level: 3.8,
+    showGrid: true,
+    showFrames: true,
+    autoRotate: true,
+    bsrVisible: false,
+    exag: {}                     // per object id
+};
+
+// Three.js core objects
+let scene, camera, renderer, controls, headLight;
 let bsrOverlay = null;
 let activeGroup = null;
-let wireframeClone = null;
-let pointsClone = null;
 
-// DOM References
+// Per-object cache: geometry, materials and data for statistics and the map
+const objects = {};
+const textureCache = {};
+
+// Shared shader uniforms (UI controls update them directly)
+const uniforms = {
+    uSnowMap: { value: null },
+    uThreshold: { value: DEFAULT_THRESHOLD },
+    uSnowOn: { value: 1 },
+    uMode: { value: 0 },
+    uContours: { value: 0 },
+    uPlaneOn: { value: 0 },
+    uLevel: { value: 3.8 },
+    uBaseExag: { value: 1 },
+    uUvScale: { value: new THREE.Vector2(1, 1) },
+    uUvOffset: { value: new THREE.Vector2(0, 0) },
+    uSnowRamp0: { value: new THREE.Color(SNOW_RAMP[0]) },
+    uSnowRamp1: { value: new THREE.Color(SNOW_RAMP[1]) },
+    uSnowRamp2: { value: new THREE.Color(SNOW_RAMP[2]) },
+    uSnowRamp3: { value: new THREE.Color(SNOW_RAMP[3]) },
+    uLevelColor: { value: new THREE.Color(LEVEL_COLOR) }
+};
+
 const dom = {};
 
 // --------------------------------------------------------------------------
@@ -64,36 +95,116 @@ async function initApp() {
     initThreeScene();
     updateLoadingProgress('Получение каталога моделей и метаданных...');
 
-    await loadManifestAndMetadata();
+    await loadManifest();
     updateLoadingProgress('Построение интерфейса...');
 
     initUI();
     initEventListeners();
-
-    updateLoadingProgress('Загрузка 3D-модели Венеры...');
-    await switchModel('globe');
-
-    dom.loadingOverlay.classList.add('hidden');
     animate();
+
+    await switchModel('globe');
 }
 
-/**
- * Sets up Renderer, Camera, Lights and Scene for Light Theme.
- */
+function bindDomElements() {
+    const id = (x) => document.getElementById(x);
+    Object.assign(dom, {
+        loadingOverlay: id('loading-overlay'),
+        loadingText: id('loading-text'),
+        themeToggle: id('btn-theme-toggle'),
+
+        regionPills: id('region-pills'),
+        selectLayer: id('select-layer'),
+        selectSnowSource: id('select-snow-source'),
+        selectViewMode: id('select-view-mode'),
+
+        sliderExag: id('slider-exag'),
+        valExag: id('val-exag'),
+        checkPlane: id('check-plane'),
+        sliderLevel: id('slider-level'),
+        valLevel: id('val-level'),
+
+        checkShowSnow: id('check-show-snow'),
+        checkContours: id('check-contours'),
+        checkGrid: id('check-grid'),
+        checkFrames: id('check-frames'),
+        checkBsrTracks: id('check-bsr-tracks'),
+        checkAutorotate: id('check-autorotate'),
+
+        btnExportGlb: id('btn-export-glb'),
+        btnExportObj: id('btn-export-obj'),
+        btnSnapshot: id('btn-snapshot'),
+        modalBackdrop: id('info-modal-backdrop'),
+        btnOpenInfo: id('btn-open-info'),
+        btnCloseModal: id('btn-close-modal'),
+
+        legendTitle: id('legend-title'),
+        legendBar: id('legend-bar'),
+        legendTicks: id('legend-ticks'),
+        legendCategorical: id('legend-categorical'),
+        legendContinuousWrap: id('legend-continuous-wrap'),
+
+        sliderThreshold: id('slider-snow-threshold'),
+        valThreshold: id('val-snow-threshold'),
+        snowScaleMin: id('snow-scale-min'),
+        snowHint: id('snow-hint'),
+        telemetry: id('telemetry'),
+
+        topmapCanvas: id('topmap-canvas'),
+        topmapReadout: id('topmap-readout'),
+        topmapLegendSnow: id('topmap-legend-snow'),
+        topmapLegendLevel: id('topmap-legend-level'),
+        topmapLegendLevelRow: id('topmap-legend-level-row')
+    });
+}
+
+function updateLoadingProgress(text) {
+    if (dom.loadingText && text) dom.loadingText.textContent = text;
+}
+
+function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+}
+
+// --------------------------------------------------------------------------
+// Theme (the initial value is set by the inline script in <head>)
+// --------------------------------------------------------------------------
+function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+
+function toggleTheme() {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+        localStorage.setItem('venus-theme', next);
+    } catch (e) {
+        // Storage may be unavailable (private mode) — the theme still switches
+    }
+    applyThemeToScene();
+}
+
+function applyThemeToScene() {
+    if (scene) scene.background = new THREE.Color(cssVar('--scene-bg', '#e8edf5'));
+    rebuildOverlays();
+    drawTopMap();
+}
+
+// --------------------------------------------------------------------------
+// Three.js scene
+// --------------------------------------------------------------------------
 function initThreeScene() {
     const container = document.getElementById('app-viewport');
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // 1. Scene with soft light background (Screenshot 2 theme)
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xe8edf5);
+    scene.background = new THREE.Color(cssVar('--scene-bg', '#e8edf5'));
 
-    // 2. Perspective Camera
-    camera = new THREE.PerspectiveCamera(42, width / height, 0.05, 5000);
+    camera = new THREE.PerspectiveCamera(42, width / height, 0.01, 5000);
     camera.position.set(2.2, 1.4, 2.8);
+    scene.add(camera);
 
-    // 3. WebGL Renderer
     renderer = new THREE.WebGLRenderer({
         canvas: document.getElementById('canvas3d'),
         antialias: true,
@@ -102,241 +213,235 @@ function initThreeScene() {
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    // Data colour maps must be shown as they are, so no tone mapping
+    renderer.toneMapping = THREE.NoToneMapping;
 
-    // 4. OrbitControls
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.autoRotate = state.camera.autoRotate;
-    controls.autoRotateSpeed = state.camera.rotateSpeed;
-    controls.minDistance = 0.6;
-    controls.maxDistance = 1500;
+    controls.autoRotate = state.autoRotate;
+    controls.autoRotateSpeed = 0.5;
 
-    // 5. Studio Lighting for Light Theme
-    ambientLight = new THREE.AmbientLight(0xffffff, state.lighting.ambientIntensity);
-    scene.add(ambientLight);
+    // Even fill lighting: a strong ambient term plus a soft "headlight" that
+    // follows the camera, so every model is lit the same from any angle while
+    // the relief still reads through gentle shading.
+    scene.add(new THREE.AmbientLight(0xffffff, 2.1));
+    headLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    headLight.position.set(0.3, 0.6, 1);
+    camera.add(headLight);
+    camera.add(headLight.target);
+    headLight.target.position.set(0, 0, -1);
 
-    sunLight = new THREE.DirectionalLight(0xfff7ed, state.lighting.sunIntensity);
-    updateSunPosition();
-    scene.add(sunLight);
-
-    const fillLight = new THREE.DirectionalLight(0xbae6fd, 0.65);
-    fillLight.position.set(-3, 2, -2);
-    scene.add(fillLight);
-
-    // 6. Active Group container for current loaded mesh
     activeGroup = new THREE.Group();
     activeGroup.name = 'active_model_group';
     scene.add(activeGroup);
 
-    // 7. BSR Overlay
     bsrOverlay = new BSROverlay(THREE, { radius: 1.008 });
     scene.add(bsrOverlay.group);
 
     window.addEventListener('resize', onWindowResize);
 }
 
-/**
- * Computes directional Sun position from Azimuth and Elevation.
- */
-function updateSunPosition() {
-    const r = 10;
-    const phi = (90 - state.lighting.elevation) * (Math.PI / 180);
-    const theta = (state.lighting.azimuth) * (Math.PI / 180);
-
-    const x = r * Math.sin(phi) * Math.sin(theta);
-    const y = r * Math.cos(phi);
-    const z = r * Math.sin(phi) * Math.cos(theta);
-
-    sunLight.position.set(x, y, z);
-    sunLight.intensity = state.lighting.sunIntensity;
-    ambientLight.intensity = state.lighting.ambientIntensity;
-}
-
 // --------------------------------------------------------------------------
-// Metadata & Manifest Loader
+// Manifest
 // --------------------------------------------------------------------------
-async function loadManifestAndMetadata() {
+async function loadManifest() {
     try {
         const resp = await fetch('/api/regions');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-        state.manifest = data;
-        state.summary = data;
+        state.manifest = await resp.json();
     } catch (err) {
         console.warn('Fallback to /api/manifest...', err);
         const mResp = await fetch('/api/manifest');
+        if (!mResp.ok) throw new Error(`Не удалось получить manifest: HTTP ${mResp.status}`);
         state.manifest = await mResp.json();
     }
+    const snow = state.manifest.snow || {};
+    if (typeof snow.default_threshold === 'number') state.snowThreshold = snow.default_threshold;
+}
+
+function getObjectMeta(id) {
+    return state.manifest.objects.find((o) => o.id === id);
+}
+
+function isGlobe(meta) {
+    return Boolean(meta) && (meta.type === 'globe' || meta.id === 'globe');
+}
+
+function activeObject() {
+    return objects[state.activeObjectId] || null;
 }
 
 // --------------------------------------------------------------------------
-// Model & Texture Switching Engine
+// Texture & image helpers
 // --------------------------------------------------------------------------
-async function switchModel(objectId) {
-    if (!state.manifest || !state.manifest.objects) return;
+function loadTexture(url, { isData = false, nearest = false } = {}) {
+    const key = `${url}|${isData ? 'data' : 'color'}|${nearest ? 'n' : 'l'}`;
+    if (textureCache[key]) return textureCache[key];
 
-    const objData = state.manifest.objects.find(o => o.id === objectId);
-    if (!objData) return;
-
-    state.activeObjectId = objectId;
-    state.activeModelData = objData;
-
-    dom.loadingOverlay.classList.remove('hidden');
-    updateLoadingProgress(`Загрузка 3D-модели: ${objData.name}...`);
-
-    while (activeGroup.children.length > 0) {
-        const child = activeGroup.children[0];
-        activeGroup.remove(child);
-        disposeObject(child);
-    }
-    wireframeClone = null;
-    pointsClone = null;
-
-    if (bsrOverlay) {
-        if (objectId === 'globe') {
-            if (!bsrOverlay.tracksData) await bsrOverlay.load();
-            bsrOverlay.setVisible(state.bsrVisible);
-        } else {
-            bsrOverlay.setVisible(false);
-        }
-    }
-
-    const glbUrl = `/export_3d/${objData.glb}`;
-    const loader = new GLTFLoader();
-
-    try {
-        const gltf = await new Promise((resolve, reject) => {
-            loader.load(glbUrl, resolve, undefined, reject);
-        });
-
-        const root = gltf.scene;
-        let targetMesh = null;
-
-        root.traverse((node) => {
-            if (node.isMesh) {
-                targetMesh = node;
+    textureCache[key] = new Promise((resolve, reject) => {
+        new THREE.TextureLoader().load(
+            url,
+            (tex) => {
+                tex.flipY = false;
+                tex.colorSpace = isData ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+                if (nearest) {
+                    tex.magFilter = THREE.NearestFilter;
+                    tex.minFilter = THREE.NearestFilter;
+                    tex.generateMipmaps = false;
+                }
+                resolve(tex);
+            },
+            undefined,
+            () => {
+                delete textureCache[key];
+                reject(new Error(`Не удалось загрузить текстуру ${url}`));
             }
-        });
-
-        if (!targetMesh) throw new Error('No mesh in GLB');
-
-        // В GLB-файлах нет атрибута NORMAL — без него освещение
-        // MeshStandardMaterial не работает, поэтому считаем нормали сами
-        if (!targetMesh.geometry.attributes.normal) {
-            targetMesh.geometry.computeVertexNormals();
-        }
-
-        state.activeMesh = targetMesh;
-        activeGroup.add(root);
-
-        // Center and frame camera with horizontal offset to account for left card
-        fitCameraToObject(root, objectId === 'globe' ? 1.45 : 1.35);
-
-        // Apply active texture layer and dynamic snow shader
-        await applyTextureLayer(state.activeLayerId);
-
-        updateLegend();
-        updateActivePills();
-        updateSelectInputs();
-
-        dom.loadingOverlay.classList.add('hidden');
-    } catch (err) {
-        console.error('Error loading model:', err);
-        dom.loadingOverlay.classList.add('hidden');
-        alert(`Не удалось загрузить модель: ${err.message}`);
-    }
-}
-
-/**
- * Loads base texture and snow probability mask, then compiles PBR material with dynamic snow shader.
- */
-async function applyTextureLayer(layerId) {
-    if (!state.activeMesh || !state.activeModelData) return;
-
-    state.activeLayerId = layerId;
-    const textures = state.activeModelData.textures || {};
-    const relPath = textures[layerId] || textures['elev'];
-
-    const baseTexture = await loadTexturePromise(`/export_3d/${relPath}`);
-
-    // Load snow probability mask for dynamic shader
-    const snowProbRelPath = textures['snow_prob_gray'] || textures['snow_prob'];
-    // Маска вероятности — это данные, а не цвет: загружаем без sRGB-преобразования
-    const snowProbTexture = await loadTexturePromise(`/export_3d/${snowProbRelPath}`, { isData: true });
-
-    // Compile dynamic PBR material with real-time snow shader
-    const mat = createCustomPBRMaterial(baseTexture, snowProbTexture);
-    state.activeMesh.material = mat;
-
-    updateLegend();
-    updateWireframeAndPoints();
-    updateSnowMetricsDisplay(state.snowThreshold);
-}
-
-/**
- * Creates custom PBR material with onBeforeCompile real-time snow shader.
- * Moving the threshold slider changes the shader uniform uSnowThreshold at 60 FPS!
- */
-function createCustomPBRMaterial(baseTexture, snowProbTexture) {
-    const mat = new THREE.MeshStandardMaterial({
-        map: baseTexture,
-        roughness: state.material.roughness,
-        metalness: state.material.metalness
+        );
     });
+    return textureCache[key];
+}
+
+function readImageRGBA(image) {
+    const w = image.width, h = image.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0);
+    return { data: ctx.getImageData(0, 0, w, h).data, width: w, height: h };
+}
+
+/** One channel of an image as a Uint8Array (row-major, top row first). */
+function readImageChannel(image, channel = 0) {
+    const { data, width, height } = readImageRGBA(image);
+    const out = new Uint8Array(width * height);
+    for (let i = 0, j = channel; i < out.length; i++, j += 4) out[i] = data[j];
+    return { data: out, width, height };
+}
+
+/** 256-entry sRGB (0..255) lookup table interpolated between the manifest colour stops. */
+function buildColorLUT(colors, n = 256) {
+    // THREE.Color stores linear values; convert back to sRGB to compare with PNG pixels
+    const stops = colors.map((c) => new THREE.Color(c).convertLinearToSRGB());
+    const lut = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+        const t = i / (n - 1) * (stops.length - 1);
+        const k = Math.min(Math.floor(t), stops.length - 2);
+        const f = t - k;
+        const a = stops[k], b = stops[k + 1];
+        lut[i * 3] = (a.r + (b.r - a.r) * f) * 255;
+        lut[i * 3 + 1] = (a.g + (b.g - a.g) * f) * 255;
+        lut[i * 3 + 2] = (a.b + (b.b - a.b) * f) * 255;
+    }
+    return lut;
+}
+
+/** Decodes a colour-mapped layer PNG back to values (nearest LUT entry). */
+function decodeColorMapped(image, layerInfo) {
+    const { data, width, height } = readImageRGBA(image);
+    const n = width * height;
+    const lut = buildColorLUT(layerInfo.colors);
+    const [vmin, vmax] = layerInfo.range;
+    const memo = new Map();
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+        const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+        const key = (r << 16) | (g << 8) | b;
+        let v = memo.get(key);
+        if (v === undefined) {
+            let best = 0, bestD = Infinity;
+            for (let j = 0; j < 256; j++) {
+                const dr = lut[j * 3] - r, dg = lut[j * 3 + 1] - g, db = lut[j * 3 + 2] - b;
+                const d = dr * dr + dg * dg + db * db;
+                if (d < bestD) { bestD = d; best = j; }
+            }
+            v = vmin + best / 255 * (vmax - vmin);
+            memo.set(key, v);
+        }
+        out[i] = v;
+    }
+    return out;
+}
+
+// --------------------------------------------------------------------------
+// Terrain material with the snow / isoline shader
+// --------------------------------------------------------------------------
+function createTerrainMaterial(baseTexture) {
+    // Lambert = purely diffuse: even, matte look without specular highlights
+    const mat = new THREE.MeshLambertMaterial({ map: baseTexture });
 
     mat.onBeforeCompile = (shader) => {
-        shader.uniforms.uSnowProbMap = { value: snowProbTexture };
-        shader.uniforms.uSnowThreshold = { value: state.snowThreshold };
-        shader.uniforms.uSnowActive = { value: state.snowOverlayEnabled ? 1 : 0 };
-        shader.uniforms.uSnowIsolate = { value: state.snowIsolate ? 1 : 0 };
-        shader.uniforms.uSnowColor = { value: new THREE.Color(0xf0f9ff) };
-        shader.uniforms.uSnowRimColor = { value: new THREE.Color(0x0284c7) };
+        Object.assign(shader.uniforms, uniforms);
 
-        mat.userData.shader = shader;
-
-        // Собственная varying-переменная для UV: встроенная vUv в three r160
-        // объявляется только при определённых дефайнах (USE_UV), а карта
-        // map использует vMapUv, поэтому vUv во фрагментном шейдере недоступна.
+        // Own varyings: three r160 only declares vUv under USE_UV
         shader.vertexShader = `
+            uniform vec2 uUvScale;
+            uniform vec2 uUvOffset;
+            uniform float uBaseExag;
             varying vec2 vSnowUv;
+            varying float vHeightKm;
         ` + shader.vertexShader.replace(
             '#include <uv_vertex>',
             `
             #include <uv_vertex>
-            vSnowUv = uv;
+            vSnowUv = uv * uUvScale + uUvOffset;
+            vHeightKm = position.y / uBaseExag;
             `
         );
 
         shader.fragmentShader = `
+            uniform sampler2D uSnowMap;
+            uniform float uThreshold;
+            uniform int uSnowOn;
+            uniform int uMode;
+            uniform int uContours;
+            uniform int uPlaneOn;
+            uniform float uLevel;
+            uniform vec3 uSnowRamp0;
+            uniform vec3 uSnowRamp1;
+            uniform vec3 uSnowRamp2;
+            uniform vec3 uSnowRamp3;
+            uniform vec3 uLevelColor;
             varying vec2 vSnowUv;
-            uniform sampler2D uSnowProbMap;
-            uniform float uSnowThreshold;
-            uniform int uSnowActive;
-            uniform int uSnowIsolate;
-            uniform vec3 uSnowColor;
-            uniform vec3 uSnowRimColor;
-        ` + shader.fragmentShader;
+            varying float vHeightKm;
 
-        shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <dithering_fragment>',
+            vec3 snowRamp(float t) {
+                if (t < 1.0 / 3.0) return mix(uSnowRamp0, uSnowRamp1, t * 3.0);
+                if (t < 2.0 / 3.0) return mix(uSnowRamp1, uSnowRamp2, t * 3.0 - 1.0);
+                return mix(uSnowRamp2, uSnowRamp3, t * 3.0 - 2.0);
+            }
+        ` + shader.fragmentShader.replace(
+            '#include <map_fragment>',
             `
-            #include <dithering_fragment>
+            #include <map_fragment>
 
-            if (uSnowActive == 1) {
-                float prob = texture2D(uSnowProbMap, vSnowUv).r;
+            float snowP = min(texture2D(uSnowMap, vSnowUv).r * (255.0 / ${GRAY_SCALE}.0), 1.0);
+            bool isSnow = uSnowOn == 1 && snowP >= uThreshold;
 
-                if (uSnowIsolate == 1 && prob < uSnowThreshold) {
-                    discard;
-                }
+            // "Только снег": hide everything that is not snow
+            if (uMode == 2 && !isSnow) discard;
 
-                if (prob >= uSnowThreshold) {
-                    float edge = smoothstep(uSnowThreshold, uSnowThreshold + 0.035, prob);
-                    vec3 snowTone = mix(uSnowRimColor, uSnowColor, edge);
-                    gl_FragColor.rgb = mix(gl_FragColor.rgb, snowTone * (gl_FragColor.rgb * 0.4 + 0.7), 0.9);
-                }
+            // Snow colour ramp: pink at the threshold -> white at p = 1
+            if (isSnow && uMode != 1) {
+                float t = clamp((snowP - uThreshold) / max(1.0 - uThreshold, 1e-3), 0.0, 1.0);
+                diffuseColor.rgb = snowRamp(t);
+            }
+
+            // Isolines every 1 km
+            if (uContours == 1) {
+                float w = max(fwidth(vHeightKm), 1e-5);
+                float d = abs(fract(vHeightKm + 0.5) - 0.5) / w;
+                float line = 1.0 - smoothstep(0.5, 1.5, d);
+                diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.0), line * 0.45);
+            }
+
+            // Where the snowline plane cuts the relief
+            if (uPlaneOn == 1) {
+                float w2 = max(fwidth(vHeightKm), 1e-5);
+                float d2 = abs(vHeightKm - uLevel) / w2;
+                float line2 = 1.0 - smoothstep(0.8, 2.0, d2);
+                diffuseColor.rgb = mix(diffuseColor.rgb, uLevelColor, line2 * 0.95);
             }
             `
         );
@@ -345,421 +450,1043 @@ function createCustomPBRMaterial(baseTexture, snowProbTexture) {
     return mat;
 }
 
-function loadTexturePromise(url, { isData = false } = {}) {
-    // Цветовые текстуры и текстуры-данные кешируются раздельно
-    const cacheKey = isData ? `${url}#data` : url;
-    if (state.loadedTextures[cacheKey]) {
-        return Promise.resolve(state.loadedTextures[cacheKey]);
-    }
-    const texLoader = new THREE.TextureLoader();
-    return new Promise((resolve, reject) => {
-        texLoader.load(
-            url,
-            (tex) => {
-                tex.flipY = false;
-                tex.colorSpace = isData ? THREE.NoColorSpace : THREE.SRGBColorSpace;
-                tex.generateMipmaps = true;
-                state.loadedTextures[cacheKey] = tex;
-                resolve(tex);
-            },
-            undefined,
-            (err) => reject(new Error(`Не удалось загрузить текстуру ${url}`))
-        );
+// --------------------------------------------------------------------------
+// Model loading
+// --------------------------------------------------------------------------
+async function loadObject(meta) {
+    if (objects[meta.id]) return objects[meta.id];
+
+    updateLoadingProgress(`Загрузка 3D-модели: ${meta.name}...`);
+    const gltf = await new GLTFLoader().loadAsync(`/export_3d/${meta.glb}`);
+
+    let mesh = null;
+    gltf.scene.traverse((node) => {
+        if (node.isMesh && !mesh) mesh = node;
     });
+    if (!mesh) throw new Error('No mesh in GLB');
+
+    const geometry = mesh.geometry;
+    const globe = isGlobe(meta);
+
+    const obj = {
+        meta,
+        globe,
+        baseExag: meta.exaggeration || (globe ? 40 : 6),
+        mesh,
+        container: new THREE.Group(),
+        terrainGroup: new THREE.Group(),   // scaled vertically for regions
+        overlayGroup: new THREE.Group(),   // grid / frames, rebuilt on demand
+        plane: null,
+        basePositions: null,
+        extent: null,
+        nr: 0,
+        nc: 0,
+        rowArea: null,     // km² per cell, per grid row
+        totalArea: 0,
+        heights: null,     // km per grid cell (regions)
+        emis: null,        // emissivity per grid cell (regions)
+        snow: {},          // source -> Uint8Array
+        snowTex: {},       // source -> THREE.Texture
+        hist: {},          // source -> Float64Array(256): area per gray value
+        layerImage: null
+    };
+
+    mesh.removeFromParent();
+    mesh.position.set(0, 0, 0);
+    mesh.rotation.set(0, 0, 0);
+    mesh.scale.set(1, 1, 1);
+    mesh.name = meta.id;
+
+    // The GLB files have no NORMAL attribute
+    if (!geometry.attributes.normal) geometry.computeVertexNormals();
+
+    if (globe) {
+        obj.basePositions = geometry.attributes.position.array.slice();
+    } else {
+        geometry.computeBoundingBox();
+        const bb = geometry.boundingBox;
+        obj.extent = {
+            halfX: Math.max(Math.abs(bb.min.x), Math.abs(bb.max.x)),
+            halfZ: Math.max(Math.abs(bb.min.z), Math.abs(bb.max.z))
+        };
+
+        // Snowline plane; lives in the scaled group, so y = level × base exaggeration
+        const planeGeo = new THREE.PlaneGeometry(obj.extent.halfX * 2, obj.extent.halfZ * 2);
+        planeGeo.rotateX(-Math.PI / 2);
+        obj.plane = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({
+            color: LEVEL_COLOR,
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        }));
+        obj.plane.renderOrder = 2;
+        obj.terrainGroup.add(obj.plane);
+    }
+
+    obj.terrainGroup.add(mesh);
+    obj.container.add(obj.terrainGroup);
+    obj.container.add(obj.overlayGroup);
+
+    const tex = await loadLayerTexture(meta, state.activeLayerId);
+    mesh.material = createTerrainMaterial(tex);
+    obj.layerImage = tex.image;
+
+    updateLoadingProgress(`Подготовка данных: ${meta.name}...`);
+    await prepareObjectData(obj);
+
+    objects[meta.id] = obj;
+    return obj;
 }
 
-function updateWireframeAndPoints() {
-    if (!state.activeMesh) return;
-
-    if (wireframeClone) {
-        activeGroup.remove(wireframeClone);
-        disposeObject(wireframeClone);
-        wireframeClone = null;
-    }
-    if (pointsClone) {
-        activeGroup.remove(pointsClone);
-        disposeObject(pointsClone);
-        pointsClone = null;
-    }
-
-    const geo = state.activeMesh.geometry;
-    const mode = state.material.displayMode;
-
-    if (mode === 'solid') {
-        state.activeMesh.visible = true;
-        state.activeMesh.material.wireframe = false;
-    } else if (mode === 'wireframe') {
-        state.activeMesh.visible = true;
-        state.activeMesh.material.wireframe = true;
-    } else if (mode === 'overlay') {
-        state.activeMesh.visible = true;
-        state.activeMesh.material.wireframe = false;
-        const wfMat = new THREE.MeshBasicMaterial({
-            color: 0x0284c7,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.35
-        });
-        wireframeClone = new THREE.Mesh(geo, wfMat);
-        activeGroup.add(wireframeClone);
-    } else if (mode === 'points') {
-        state.activeMesh.visible = false;
-        const ptsMat = new THREE.PointsMaterial({
-            size: 1.8,
-            color: 0x0284c7,
-            transparent: true,
-            opacity: 0.85
-        });
-        pointsClone = new THREE.Points(geo, ptsMat);
-        activeGroup.add(pointsClone);
-    }
+async function loadLayerTexture(meta, layerId) {
+    const textures = meta.textures || {};
+    const rel = textures[layerId] || textures.elev;
+    const tex = await loadTexture(`/export_3d/${rel}`, { nearest: layerId === 'cluster' });
+    if (!isGlobe(meta)) applyPixelCenterUv(tex);
+    return tex;
 }
 
 /**
- * Frames object with subtle horizontal target offset so it centers between left and right cards.
+ * Region meshes put UV 0 and 1 on the first and last vertex, while a texture
+ * pixel's centre is at (i + 0.5) / n. Shift the texture so each vertex samples
+ * the centre of its own pixel.
  */
-function fitCameraToObject(object, offsetFactor = 1.4) {
-    const box = new THREE.Box3().setFromObject(object);
-    const sphere = box.getBoundingSphere(new THREE.Sphere());
-    const radius = sphere.radius || 1;
-
-    const fov = camera.fov * (Math.PI / 180);
-    const distance = (radius / Math.sin(fov / 2)) * offsetFactor;
-
-    controls.target.copy(sphere.center);
-
-    // Frame camera nicely
-    const dir = new THREE.Vector3(1, 0.85, 1.3).normalize();
-    camera.position.copy(sphere.center).add(dir.multiplyScalar(distance));
-    camera.near = radius * 0.01;
-    camera.far = radius * 20;
-    camera.updateProjectionMatrix();
-
-    controls.update();
+function applyPixelCenterUv(tex) {
+    const w = tex.image.width, h = tex.image.height;
+    tex.repeat.set((w - 1) / w, (h - 1) / h);
+    tex.offset.set(0.5 / w, 0.5 / h);
 }
 
-function disposeObject(obj) {
+async function prepareObjectData(obj) {
+    const { meta, globe } = obj;
+
+    // Snow sources: gray PNGs, probability = pixel / 254
+    for (const [src, texKey] of Object.entries(SNOW_SOURCES)) {
+        const rel = meta.textures && meta.textures[texKey];
+        if (!rel) continue;
+        const tex = await loadTexture(`/export_3d/${rel}`, { isData: true });
+        const { data, width, height } = readImageChannel(tex.image, 0);
+        obj.snow[src] = data;
+        obj.snowTex[src] = tex;
+        obj.nr = height;
+        obj.nc = width;
+    }
+
+    const nr = obj.nr, nc = obj.nc;
+    if (!nr || !nc) return;
+
+    const rowArea = new Float32Array(nr);
+    if (globe) {
+        const dLat = 180 / nr, dLon = 360 / nc;
+        for (let r = 0; r < nr; r++) {
+            const lat = 90 - (r + 0.5) * dLat;
+            rowArea[r] = (dLat * KM_PER_DEG) * (dLon * KM_PER_DEG * Math.cos(lat * Math.PI / 180));
+        }
+    } else {
+        const { lat, lon } = meta.bounds;
+        const dLat = (lat[1] - lat[0]) / (nr - 1);
+        const dLon = (lon[1] - lon[0]) / (nc - 1);
+        for (let r = 0; r < nr; r++) {
+            const la = lat[1] - r * dLat;
+            rowArea[r] = (dLat * KM_PER_DEG) * (dLon * KM_PER_DEG * Math.cos(la * Math.PI / 180));
+        }
+    }
+    obj.rowArea = rowArea;
+    obj.totalArea = rowArea.reduce((s, a) => s + a * nc, 0);
+
+    // Area histogram per gray value → snow area for any threshold in O(256)
+    for (const [src, data] of Object.entries(obj.snow)) {
+        const hist = new Float64Array(256);
+        for (let r = 0; r < nr; r++) {
+            const a = rowArea[r];
+            const base = r * nc;
+            for (let c = 0; c < nc; c++) hist[data[base + c]] += a;
+        }
+        obj.hist[src] = hist;
+    }
+
+    if (!globe) {
+        // Heights come straight from the mesh: vertex i = row × nc + col (row 0 = north)
+        const pos = obj.mesh.geometry.attributes.position;
+        if (pos.count === nr * nc) {
+            obj.heights = new Float32Array(pos.count);
+            for (let i = 0; i < pos.count; i++) obj.heights[i] = pos.getY(i) / obj.baseExag;
+        } else {
+            console.warn(`Сетка ${meta.id} не совпадает с текстурой: ${pos.count} ≠ ${nr}×${nc}`);
+        }
+
+        // Emissivity for the "above / below the plane" statistic
+        const emisInfo = state.manifest.layers && state.manifest.layers.emis;
+        if (emisInfo && meta.textures.emis) {
+            const tex = await loadTexture(`/export_3d/${meta.textures.emis}`);
+            if (tex.image.width === nc && tex.image.height === nr) {
+                obj.emis = decodeColorMapped(tex.image, emisInfo);
+            }
+        }
+    }
+}
+
+function snowAreaFor(obj, src, thr) {
+    const hist = obj.hist[src];
+    if (!hist) return 0;
+    const from = Math.max(0, Math.ceil(thr * GRAY_SCALE - 1e-6));
+    let sum = 0;
+    for (let v = from; v < 256; v++) sum += hist[v];
+    return sum;
+}
+
+// --------------------------------------------------------------------------
+// Switching objects and layers
+// --------------------------------------------------------------------------
+async function switchModel(objectId) {
+    const meta = getObjectMeta(objectId);
+    if (!meta) return;
+
+    dom.loadingOverlay.classList.remove('hidden');
+    try {
+        const obj = await loadObject(meta);
+
+        state.activeObjectId = objectId;
+        while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
+        activeGroup.add(obj.container);
+
+        await setObjectLayer(obj, state.activeLayerId);
+
+        document.body.classList.toggle('scope-globe', obj.globe);
+        document.body.classList.toggle('scope-region', !obj.globe);
+
+        const range = obj.globe ? EXAG_RANGES.globe : EXAG_RANGES.region;
+        dom.sliderExag.min = range.min;
+        dom.sliderExag.max = range.max;
+        dom.sliderExag.step = range.step;
+        if (state.exag[objectId] === undefined) state.exag[objectId] = obj.baseExag;
+        dom.sliderExag.value = state.exag[objectId];
+
+        // Default plane level = the region's snowline h_c
+        if (!obj.globe) {
+            state.level = Math.round((meta.snowline_km ?? 3.5) * 10) / 10;
+            dom.sliderLevel.value = state.level;
+        }
+
+        if (bsrOverlay) {
+            if (obj.globe && !bsrOverlay.tracksData) await bsrOverlay.load();
+            bsrOverlay.setVisible(obj.globe && state.bsrVisible);
+        }
+
+        applyExaggeration();
+        syncUniforms();
+        rebuildOverlays();
+        fitCameraToObject(obj);
+        updateActivePills();
+        updateLegend();
+        updateTelemetry();
+        drawTopMap();
+    } catch (err) {
+        console.error('Error loading model:', err);
+        alert(`Не удалось загрузить модель: ${err.message}`);
+    } finally {
+        dom.loadingOverlay.classList.add('hidden');
+    }
+}
+
+async function setObjectLayer(obj, layerId) {
+    const tex = await loadLayerTexture(obj.meta, layerId);
+    const mat = obj.mesh.material;
+    if (mat.map !== tex) {
+        mat.map = tex;
+        mat.needsUpdate = true;
+    }
+    obj.layerImage = tex.image;
+}
+
+async function applyLayer(layerId) {
+    state.activeLayerId = layerId;
+    const obj = activeObject();
+    if (obj) await setObjectLayer(obj, layerId);
+    syncUniforms();
+    updateLegend();
+    drawTopMap();
+}
+
+/** Pushes UI state into the shader uniforms and helper objects. */
+function syncUniforms() {
+    const obj = activeObject();
     if (!obj) return;
-    if (obj.geometry) obj.geometry.dispose();
-    if (obj.material) {
-        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-        else obj.material.dispose();
+
+    // As in the reference pages, the snow overlay is not drawn over the snow
+    // layers themselves (it would hide what they show)
+    const layerIsSnow = state.activeLayerId === 'snow_prob' || state.activeLayerId === 'anomaly';
+
+    uniforms.uSnowMap.value = obj.snowTex[state.snowSource] || null;
+    uniforms.uThreshold.value = state.snowThreshold;
+    uniforms.uSnowOn.value = state.showSnow && !layerIsSnow && uniforms.uSnowMap.value ? 1 : 0;
+    uniforms.uMode.value = { both: 0, relief: 1, snow: 2 }[state.viewMode] ?? 0;
+    uniforms.uContours.value = !obj.globe && state.contours ? 1 : 0;
+    uniforms.uPlaneOn.value = !obj.globe && state.planeOn ? 1 : 0;
+    uniforms.uLevel.value = state.level;
+    uniforms.uBaseExag.value = obj.globe ? 1 : obj.baseExag;
+
+    if (obj.globe) {
+        uniforms.uUvScale.value.set(1, 1);
+        uniforms.uUvOffset.value.set(0, 0);
+    } else {
+        uniforms.uUvScale.value.set((obj.nc - 1) / obj.nc, (obj.nr - 1) / obj.nr);
+        uniforms.uUvOffset.value.set(0.5 / obj.nc, 0.5 / obj.nr);
+    }
+
+    if (obj.plane) {
+        obj.plane.visible = state.planeOn;
+        obj.plane.position.y = state.level * obj.baseExag;
+    }
+
+    dom.valLevel.textContent = `${state.level.toFixed(1)} км`;
+    const thr = state.snowThreshold;
+    dom.valThreshold.textContent = Math.abs(thr - DEFAULT_THRESHOLD) < 1e-6 ? `${thr.toFixed(2)} (оптимум)` : thr.toFixed(2);
+    dom.snowScaleMin.textContent = `p = ${thr.toFixed(2)}`;
+    dom.snowHint.textContent = layerIsSnow
+        ? 'На слоях вероятности снега и аномальности снег поверх слоя не рисуется: слой сам его показывает.'
+        : 'Области с вероятностью выше порога окрашены цветом снега.';
+}
+
+// --------------------------------------------------------------------------
+// Relief exaggeration
+// --------------------------------------------------------------------------
+let exagFrame = 0;
+function scheduleExaggeration() {
+    if (exagFrame) return;
+    exagFrame = requestAnimationFrame(() => {
+        exagFrame = 0;
+        applyExaggeration();
+        rebuildOverlays();
+    });
+}
+
+function applyExaggeration() {
+    const obj = activeObject();
+    if (!obj) return;
+    const exag = state.exag[state.activeObjectId];
+    dom.valExag.textContent = `${exag}×`;
+
+    if (obj.globe) {
+        // Globe: r = 1 + h·exag / R → rescale the radial relief of every vertex
+        const k = exag / obj.baseExag;
+        const base = obj.basePositions;
+        const geo = obj.mesh.geometry;
+        const arr = geo.attributes.position.array;
+        for (let i = 0; i < base.length; i += 3) {
+            const x = base[i], y = base[i + 1], z = base[i + 2];
+            const r0 = Math.sqrt(x * x + y * y + z * z);
+            const s = (1 + (r0 - 1) * k) / r0;
+            arr[i] = x * s;
+            arr[i + 1] = y * s;
+            arr[i + 2] = z * s;
+        }
+        geo.attributes.position.needsUpdate = true;
+        geo.computeVertexNormals();
+        geo.computeBoundingSphere();
+    } else {
+        // Regions: Y = height × exaggeration → scale the terrain group vertically
+        obj.terrainGroup.scale.y = exag / obj.baseExag;
     }
 }
 
 // --------------------------------------------------------------------------
-// UI & Control Handlers
+// Overlays: coordinate grid (regions) and region frames (globe)
 // --------------------------------------------------------------------------
-function bindDomElements() {
-    dom.loadingOverlay = document.getElementById('loading-overlay');
-    dom.loadingText = document.getElementById('loading-text');
-
-    dom.regionPillContainer = document.getElementById('region-pills');
-    dom.selectLayer = document.getElementById('select-layer');
-    dom.selectDisplayMode = document.getElementById('select-display-mode');
-
-    dom.sliderSnowThreshold = document.getElementById('slider-snow-threshold');
-    dom.valSnowThreshold = document.getElementById('val-snow-threshold');
-    dom.sliderRoughness = document.getElementById('slider-roughness');
-    dom.valRoughness = document.getElementById('val-roughness');
-    dom.sliderMetalness = document.getElementById('slider-metalness');
-    dom.valMetalness = document.getElementById('val-metalness');
-    dom.sliderSunElev = document.getElementById('slider-sun-elev');
-    dom.valSunElev = document.getElementById('val-sun-elev');
-    dom.sliderSunAzimuth = document.getElementById('slider-sun-azimuth');
-    dom.valSunAzimuth = document.getElementById('val-sun-azimuth');
-
-    dom.checkSnowActive = document.getElementById('check-snow-active');
-    dom.checkSnowIsolate = document.getElementById('check-snow-isolate');
-    dom.checkAutorotate = document.getElementById('check-autorotate');
-    dom.checkBsrTracks = document.getElementById('check-bsr-tracks');
-
-    dom.btnTimelinePlay = document.getElementById('btn-timeline-play');
-    dom.btnExportGlb = document.getElementById('btn-export-glb');
-    dom.btnExportObj = document.getElementById('btn-export-obj');
-    dom.btnSnapshot = document.getElementById('btn-snapshot');
-
-    dom.modalBackdrop = document.getElementById('info-modal-backdrop');
-    dom.btnOpenInfo = document.getElementById('btn-open-info');
-    dom.btnCloseModal = document.getElementById('btn-close-modal');
-
-    dom.legendTitle = document.getElementById('legend-title');
-    dom.legendBar = document.getElementById('legend-bar');
-    dom.legendTicks = document.getElementById('legend-ticks');
-    dom.legendCategorical = document.getElementById('legend-categorical');
-    dom.legendContinuousWrap = document.getElementById('legend-continuous-wrap');
-
-    dom.legendRegionName = document.getElementById('legend-region-name');
-    dom.legendElevRange = document.getElementById('legend-elev-range');
-    dom.legendSnowline = document.getElementById('legend-snowline');
-    dom.legendSnowArea = document.getElementById('legend-snow-area');
-    dom.legendMeshStats = document.getElementById('legend-mesh-stats');
-}
-
-function updateLoadingProgress(text) {
-    if (dom.loadingText && text) dom.loadingText.textContent = text;
-}
-
-function initUI() {
-    buildRegionPills();
-    populateSelectDropdowns();
-    updateLegend();
-}
-
-function buildRegionPills() {
-    if (!dom.regionPillContainer || !state.manifest || !state.manifest.objects) return;
-    dom.regionPillContainer.innerHTML = '';
-
-    state.manifest.objects.forEach((obj) => {
-        const btn = document.createElement('button');
-        btn.className = `model-pill ${obj.id === state.activeObjectId ? 'active' : ''}`;
-        btn.textContent = obj.name;
-        btn.addEventListener('click', () => {
-            switchModel(obj.id);
-        });
-        dom.regionPillContainer.appendChild(btn);
-    });
-}
-
-function updateActivePills() {
-    const pills = document.querySelectorAll('.model-pill');
-    pills.forEach((p, idx) => {
-        const obj = state.manifest.objects[idx];
-        if (obj) {
-            p.classList.toggle('active', obj.id === state.activeObjectId);
+function disposeObject(root) {
+    root.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach((m) => {
+                if (m.map) m.map.dispose();
+                m.dispose();
+            });
         }
     });
 }
 
-function populateSelectDropdowns() {
-    if (!state.manifest) return;
-
-    // Layer Select
-    dom.selectLayer.innerHTML = '';
-    const layers = state.manifest.layers || {};
-    const layerKeys = ['elev', 'snow_prob', 'elev_snow', 'cluster', 'anomaly', 'emis', 'eps_refl', 'refl_norm', 'slope'];
-
-    layerKeys.forEach((key) => {
-        const lInfo = layers[key] || { title: key };
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = lInfo.title;
-        dom.selectLayer.appendChild(opt);
-    });
-
-    updateSelectInputs();
+function rebuildOverlays() {
+    const obj = activeObject();
+    if (!obj) return;
+    const group = obj.overlayGroup;
+    while (group.children.length) {
+        const child = group.children[0];
+        group.remove(child);
+        disposeObject(child);
+    }
+    if (obj.globe) {
+        if (state.showFrames) buildRegionFrames(obj, group);
+    } else if (state.showGrid) {
+        buildCoordinateGrid(obj, group);
+    }
 }
 
-function updateSelectInputs() {
-    if (dom.selectLayer) dom.selectLayer.value = state.activeLayerId;
+function makeLabel(text, worldHeight, color, { bold = false } = {}) {
+    const fontPx = 48;
+    const font = `${bold ? '600 ' : ''}${fontPx}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = font;
+    const w = Math.ceil(ctx.measureText(text).width) + 16;
+    const h = fontPx + 16;
+    canvas.width = w;
+    canvas.height = h;
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, h / 2);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sprite.scale.set(worldHeight * w / h, worldHeight, 1);
+    sprite.renderOrder = 5;
+    return sprite;
+}
+
+function niceStep(span, target = 6) {
+    const raw = span / target;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    for (const m of [1, 2, 2.5, 5, 10]) {
+        if (raw <= m * pow) return m * pow;
+    }
+    return 10 * pow;
+}
+
+function ticks(min, max, step) {
+    const out = [];
+    for (let v = Math.ceil(min / step - 1e-9) * step; v <= max + 1e-9; v += step) {
+        out.push(Math.round(v * 1e6) / 1e6);
+    }
+    return out;
+}
+
+function fmtDeg(v) {
+    const s = Number.isInteger(v) ? String(v) : v.toFixed(1);
+    return `${s.replace('-', '−')}°`;
+}
+
+function buildCoordinateGrid(obj, group) {
+    const { meta, extent } = obj;
+    const exag = state.exag[meta.id];
+    const { lat, lon } = meta.bounds;
+    const X = extent.halfX, Z = extent.halfZ;
+    const [eMin, eMax] = meta.height_range_km || [0, 10];
+    const hMin = Math.floor(Math.min(eMin, 0));
+    const hMax = Math.ceil(eMax);
+    const y0 = hMin * exag, y1 = hMax * exag;
+
+    const labelColor = cssVar('--grid-label', '#334155');
+    const lineMat = new THREE.LineBasicMaterial({
+        color: new THREE.Color(cssVar('--grid-line', '#0f172a')),
+        transparent: true,
+        opacity: parseFloat(cssVar('--grid-line-opacity', '0.28')),
+        depthWrite: false
+    });
+
+    const lonToX = (v) => -X + (v - lon[0]) / (lon[1] - lon[0]) * 2 * X;
+    const latToZ = (v) => -Z + (lat[1] - v) / (lat[1] - lat[0]) * 2 * Z;
+
+    const lonTicks = ticks(lon[0], lon[1], niceStep(lon[1] - lon[0], 6));
+    const latTicks = ticks(lat[0], lat[1], niceStep(lat[1] - lat[0], 6));
+
+    const labelSize = Math.max(X, Z) * 0.045;
+    // Height ticks: keep labels from overlapping at small exaggeration
+    let hStep = niceStep(hMax - hMin, 5);
+    while (hStep * exag < labelSize * 1.3 && hStep < (hMax - hMin)) hStep = niceStep(hStep * 2.2, 1);
+    const hTicks = ticks(hMin, hMax, hStep);
+
+    const pts = [];
+    const seg = (a, b) => pts.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+
+    // Floor grid
+    lonTicks.forEach((v) => seg([lonToX(v), y0, -Z], [lonToX(v), y0, Z]));
+    latTicks.forEach((v) => seg([-X, y0, latToZ(v)], [X, y0, latToZ(v)]));
+    seg([-X, y0, -Z], [X, y0, -Z]); seg([X, y0, -Z], [X, y0, Z]);
+    seg([X, y0, Z], [-X, y0, Z]); seg([-X, y0, Z], [-X, y0, -Z]);
+
+    // North wall (z = −Z) and west wall (x = −X), like the back planes in Plotly
+    lonTicks.forEach((v) => seg([lonToX(v), y0, -Z], [lonToX(v), y1, -Z]));
+    latTicks.forEach((v) => seg([-X, y0, latToZ(v)], [-X, y1, latToZ(v)]));
+    hTicks.forEach((h) => {
+        seg([-X, h * exag, -Z], [X, h * exag, -Z]);
+        seg([-X, h * exag, -Z], [-X, h * exag, Z]);
+    });
+    seg([-X, y0, -Z], [-X, y1, -Z]);
+    seg([X, y0, -Z], [X, y1, -Z]);
+    seg([-X, y0, Z], [-X, y1, Z]);
+    seg([-X, y1, -Z], [X, y1, -Z]);
+    seg([-X, y1, -Z], [-X, y1, Z]);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    const lines = new THREE.LineSegments(geo, lineMat);
+    lines.renderOrder = 1;
+    group.add(lines);
+
+    // Tick labels
+    const off = labelSize * 1.2;
+    let maxLatLabelW = 0;
+    lonTicks.forEach((v) => {
+        const s = makeLabel(fmtDeg(v), labelSize, labelColor);
+        s.position.set(lonToX(v), y0, Z + off);
+        group.add(s);
+    });
+    latTicks.forEach((v) => {
+        const s = makeLabel(fmtDeg(v), labelSize, labelColor);
+        maxLatLabelW = Math.max(maxLatLabelW, s.scale.x);
+        s.position.set(X + off * 0.4 + s.scale.x / 2, y0, latToZ(v));
+        group.add(s);
+    });
+    hTicks.forEach((h) => {
+        const s = makeLabel(String(h).replace('-', '−'), labelSize, labelColor);
+        s.position.set(X + off * 0.9, h * exag, -Z - off * 0.6);
+        group.add(s);
+    });
+
+    // Axis titles
+    const titleSize = labelSize * 1.05;
+    const tLon = makeLabel('долгота, ° в.д.', titleSize, labelColor, { bold: true });
+    tLon.position.set(0, y0, Z + off * 2.6);
+    group.add(tLon);
+    const tLat = makeLabel('широта, °', titleSize, labelColor, { bold: true });
+    tLat.position.set(X + off * 0.9 + maxLatLabelW + tLat.scale.x / 2, y0, 0);
+    group.add(tLat);
+    const tH = makeLabel('высота, км', titleSize, labelColor, { bold: true });
+    tH.position.set(X + off * 0.9, y1 + off * 1.4, -Z - off * 0.6);
+    group.add(tH);
+}
+
+function latLonToVec(latDeg, lonDeg, r) {
+    const p = latDeg * Math.PI / 180, l = lonDeg * Math.PI / 180;
+    // glTF: +X → (0°N, 0°E), +Y → north pole, −Z → 90°E
+    return new THREE.Vector3(r * Math.cos(p) * Math.cos(l), r * Math.sin(p), -r * Math.cos(p) * Math.sin(l));
+}
+
+function buildRegionFrames(obj, group) {
+    const exag = state.exag[obj.meta.id];
+    const r = 1 + 12 * exag / R_KM + 0.002;   // just above the highest peak, as in the reference
+    const color = cssVar('--frame-line', '#0284c7');
+    const lineMat = new THREE.LineBasicMaterial({ color: new THREE.Color(color) });
+
+    state.manifest.objects.filter((o) => !isGlobe(o) && o.bounds).forEach((o) => {
+        const { lat, lon } = o.bounds;
+        const pts = [];
+        const n = 40;
+        for (let i = 0; i <= n; i++) pts.push(latLonToVec(lat[1], lon[0] + (lon[1] - lon[0]) * i / n, r));
+        for (let i = 1; i <= n; i++) pts.push(latLonToVec(lat[1] - (lat[1] - lat[0]) * i / n, lon[1], r));
+        for (let i = 1; i <= n; i++) pts.push(latLonToVec(lat[0], lon[1] - (lon[1] - lon[0]) * i / n, r));
+        for (let i = 1; i <= n; i++) pts.push(latLonToVec(lat[0] + (lat[1] - lat[0]) * i / n, lon[0], r));
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat.clone());
+        line.renderOrder = 3;
+        group.add(line);
+
+        const label = makeLabel(o.name, 0.05, color, { bold: true });
+        label.position.copy(latLonToVec(lat[1] + 2.5, (lon[0] + lon[1]) / 2, r + 0.02));
+        group.add(label);
+    });
+    lineMat.dispose();
+}
+
+// --------------------------------------------------------------------------
+// Camera
+// --------------------------------------------------------------------------
+function fitCameraToObject(obj) {
+    if (obj.globe) {
+        controls.target.set(0, 0, 0);
+        camera.position.set(1.9, 1.2, 2.4).normalize().multiplyScalar(3.6);
+        camera.near = 0.01;
+        camera.far = 100;
+        controls.minDistance = 1.3;
+        controls.maxDistance = 12;
+    } else {
+        const { halfX, halfZ } = obj.extent;
+        const radius = Math.sqrt(halfX * halfX + halfZ * halfZ);
+        const fov = camera.fov * Math.PI / 180;
+        const distance = radius / Math.sin(fov / 2) * 1.4;
+        controls.target.set(0, 0, 0);
+        // Looking from the south-west, like the reference pages
+        const dir = new THREE.Vector3(-1.3, 0.95, 1.5).normalize();
+        camera.position.copy(dir.multiplyScalar(distance));
+        camera.near = radius * 0.005;
+        camera.far = radius * 30;
+        controls.minDistance = radius * 0.1;
+        controls.maxDistance = radius * 8;
+    }
+    updateViewOffset();
+    controls.update();
+}
+
+// --------------------------------------------------------------------------
+// UI: pills, selects, legend, telemetry
+// --------------------------------------------------------------------------
+function initUI() {
+    buildRegionPills();
+
+    dom.selectLayer.innerHTML = '';
+    const layers = state.manifest.layers || {};
+    LAYER_ORDER.filter((k) => layers[k]).forEach((key) => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = layers[key].title;
+        dom.selectLayer.appendChild(opt);
+    });
+    dom.selectLayer.value = state.activeLayerId;
+
+    dom.selectSnowSource.value = state.snowSource;
+    dom.selectViewMode.value = state.viewMode;
+    dom.sliderThreshold.value = state.snowThreshold;
+    dom.checkShowSnow.checked = state.showSnow;
+    dom.checkContours.checked = state.contours;
+    dom.checkPlane.checked = state.planeOn;
+    dom.checkGrid.checked = state.showGrid;
+    dom.checkFrames.checked = state.showFrames;
+    dom.checkAutorotate.checked = state.autoRotate;
+    dom.checkBsrTracks.checked = state.bsrVisible;
+}
+
+function buildRegionPills() {
+    dom.regionPills.innerHTML = '';
+    state.manifest.objects.forEach((obj) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'model-pill';
+        btn.dataset.id = obj.id;
+        btn.textContent = obj.name;
+        btn.addEventListener('click', () => {
+            if (obj.id !== state.activeObjectId) switchModel(obj.id);
+        });
+        dom.regionPills.appendChild(btn);
+    });
+}
+
+function updateActivePills() {
+    dom.regionPills.querySelectorAll('.model-pill').forEach((p) => {
+        p.classList.toggle('active', p.dataset.id === state.activeObjectId);
+    });
+}
+
+function fmtNum(v, digits = 0) {
+    return v.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function updateLegend() {
-    if (!state.manifest || !state.manifest.layers) return;
+    const layers = state.manifest.layers || {};
+    const lInfo = layers[state.activeLayerId];
+    if (!lInfo) return;
 
-    const layerId = state.activeLayerId;
-    const lInfo = state.manifest.layers[layerId];
+    dom.legendTitle.textContent = lInfo.title;
 
-    if (layerId === 'cluster' && lInfo && lInfo.labels && lInfo.colors) {
-        dom.legendTitle.textContent = lInfo.title;
+    if (lInfo.type === 'categorical' && lInfo.labels) {
         dom.legendContinuousWrap.style.display = 'none';
         dom.legendCategorical.style.display = 'flex';
         dom.legendCategorical.innerHTML = '';
-
         lInfo.labels.forEach((label, idx) => {
-            const col = lInfo.colors[idx] || '#888';
             const item = document.createElement('div');
             item.className = 'legend-cat-item';
-            item.innerHTML = `<span class="legend-cat-dot" style="background: ${col};"></span> <span>${label}</span>`;
+            const dot = document.createElement('span');
+            dot.className = 'legend-cat-dot';
+            dot.style.background = lInfo.colors[idx] || '#888';
+            const text = document.createElement('span');
+            text.textContent = label;
+            item.append(dot, text);
             dom.legendCategorical.appendChild(item);
         });
     } else {
         dom.legendCategorical.style.display = 'none';
         dom.legendContinuousWrap.style.display = 'flex';
+        dom.legendBar.style.background = `linear-gradient(90deg, ${(lInfo.colors || ['#000', '#fff']).join(', ')})`;
+        const [a, b] = lInfo.range || [0, 1];
+        const digits = Math.abs(b - a) < 2 ? 2 : 1;
+        dom.legendTicks.innerHTML = '';
+        [a, (a + b) / 2, b].forEach((v) => {
+            const s = document.createElement('span');
+            s.textContent = fmtNum(v, digits);
+            dom.legendTicks.appendChild(s);
+        });
+    }
+}
 
-        if (layerId === 'elev_snow') {
-            dom.legendTitle.textContent = 'Рельеф + Снежный покров';
-            dom.legendBar.style.background = 'linear-gradient(90deg, #1b0f08, #8a4a1c, #c98a3a, #ecc98a, #0284c7, #ffffff)';
-            dom.legendTicks.innerHTML = `<span>Низина (-2 км)</span><span>Снеговая линия (hc)</span><span>Вершина (11.3 км)</span>`;
-        } else if (lInfo) {
-            dom.legendTitle.textContent = lInfo.title;
-            const range = lInfo.range || [0, 1];
-            const grad = (lInfo.colors || ['#000', '#fff']).join(', ');
-            dom.legendBar.style.background = `linear-gradient(90deg, ${grad})`;
-            const mid = (range[0] + range[1]) / 2;
-            dom.legendTicks.innerHTML = `<span>${range[0].toFixed(1)}</span><span>${mid.toFixed(1)}</span><span>${range[1].toFixed(1)}</span>`;
+function updateTelemetry() {
+    const obj = activeObject();
+    if (!obj) return;
+    const { meta } = obj;
+    const thr = state.snowThreshold;
+    const snowArea = snowAreaFor(obj, state.snowSource, thr);
+    const srcLabel = state.snowSource === 'anomaly' ? 'аномальность' : 'классификатор';
+    const rows = [];
+
+    if (obj.globe) {
+        const [hMin, hMax] = meta.height_range_km || [0, 0];
+        rows.push(['объект', meta.name, true]);
+        rows.push(['диапазон высот', `${fmtNum(hMin, 1)} … ${fmtNum(hMax, 1)} км`]);
+        rows.push([`площадь снега при p ≥ ${thr.toFixed(2)} (${srcLabel})`, `${fmtNum(Math.round(snowArea))} км²`, true]);
+        rows.push(['доля поверхности под снегом', `${fmtNum(100 * snowArea / Math.max(obj.totalArea, 1), 2)} %`]);
+        rows.push(['вертикальное преувеличение', `${state.exag[meta.id]}×`]);
+    } else {
+        rows.push(['регион', meta.name, true]);
+        rows.push(['максимальная высота', `${fmtNum((meta.height_range_km || [0, 0])[1], 2)} км`]);
+        rows.push(['снеговая линия h_c', meta.snowline_km != null ? `${fmtNum(meta.snowline_km, 2)} км` : 'не выделена']);
+        rows.push([`площадь снега при p ≥ ${thr.toFixed(2)} (${srcLabel})`, `${fmtNum(Math.round(snowArea))} км²`, true]);
+        rows.push(['доля региона под снегом', `${fmtNum(100 * snowArea / Math.max(obj.totalArea, 1), 2)} %`]);
+
+        if (state.planeOn && obj.heights) {
+            let aAbove = 0, eA = 0, nA = 0, eB = 0, nB = 0;
+            const { nr, nc, heights, emis, rowArea } = obj;
+            for (let r = 0; r < nr; r++) {
+                for (let c = 0; c < nc; c++) {
+                    const i = r * nc + c;
+                    if (heights[i] >= state.level) {
+                        aAbove += rowArea[r];
+                        if (emis) { eA += emis[i]; nA++; }
+                    } else if (emis) {
+                        eB += emis[i]; nB++;
+                    }
+                }
+            }
+            rows.push([`площадь выше плоскости ${state.level.toFixed(1)} км`, `${fmtNum(Math.round(aAbove))} км²`]);
+            rows.push(['излучательная способность выше / ниже плоскости',
+                emis ? `${nA ? fmtNum(eA / nA, 3) : '—'} / ${nB ? fmtNum(eB / nB, 3) : '—'}` : 'нет данных']);
+        } else {
+            rows.push(['площадь выше плоскости', 'плоскость скрыта']);
         }
     }
 
-    // Telemetry
-    if (state.activeModelData) {
-        const obj = state.activeModelData;
-        dom.legendRegionName.textContent = obj.name;
-
-        const hRange = obj.height_range_km || [-2, 11];
-        dom.legendElevRange.textContent = `${hRange[0].toFixed(1)} .. ${hRange[1].toFixed(1)} км`;
-
-        dom.legendSnowline.textContent = obj.snowline_km ? `${obj.snowline_km.toFixed(2)} км` : '—';
-
-        const vCount = obj.vertices ? obj.vertices.toLocaleString() : '—';
-        const tCount = obj.triangles ? obj.triangles.toLocaleString() : '—';
-        dom.legendMeshStats.textContent = `${tCount} / ${vCount}`;
+    if (meta.triangles && meta.vertices) {
+        rows.push(['сетка (полигоны / вершины)', `${fmtNum(meta.triangles)} / ${fmtNum(meta.vertices)}`]);
     }
-}
 
-function updateSnowMetricsDisplay(threshold) {
-    if (!state.activeModelData || !dom.legendSnowArea) return;
-    const baseArea = state.activeModelData.snow_area_km2_default || 0;
-    const ratio = Math.max(0.05, Math.min(2.5, 1.0 + (0.77 - threshold) * 2.2));
-    const estimatedArea = Math.round(baseArea * ratio);
-    dom.legendSnowArea.textContent = `${estimatedArea.toLocaleString()} км²`;
+    dom.telemetry.innerHTML = '';
+    rows.forEach(([label, value, accent]) => {
+        const row = document.createElement('div');
+        row.className = 'telemetry-row';
+        const l = document.createElement('span');
+        l.className = 'telemetry-label';
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.className = `telemetry-value${accent ? ' accent' : ''}`;
+        v.textContent = value;
+        row.append(l, v);
+        dom.telemetry.appendChild(row);
+    });
 }
 
 // --------------------------------------------------------------------------
-// Event Listeners & Interactive Handlers
+// Top-down map (regions)
+// --------------------------------------------------------------------------
+const topmap = { plot: null };
+
+/** Marching squares: line segments [c0, r0, c1, r1, …] in grid coordinates. */
+function contourSegments(values, nr, nc, level) {
+    const segs = [];
+    const lerp = (a, b) => (level - a) / (b - a);
+    for (let r = 0; r < nr - 1; r++) {
+        for (let c = 0; c < nc - 1; c++) {
+            const v0 = values[r * nc + c];           // top-left
+            const v1 = values[r * nc + c + 1];       // top-right
+            const v2 = values[(r + 1) * nc + c + 1]; // bottom-right
+            const v3 = values[(r + 1) * nc + c];     // bottom-left
+            const idx = (v0 >= level ? 8 : 0) | (v1 >= level ? 4 : 0) | (v2 >= level ? 2 : 0) | (v3 >= level ? 1 : 0);
+            if (idx === 0 || idx === 15) continue;
+            const top = [c + lerp(v0, v1), r];
+            const right = [c + 1, r + lerp(v1, v2)];
+            const bottom = [c + lerp(v3, v2), r + 1];
+            const left = [c, r + lerp(v0, v3)];
+            const add = (a, b) => segs.push(a[0], a[1], b[0], b[1]);
+            switch (idx) {
+                case 1: case 14: add(left, bottom); break;
+                case 2: case 13: add(bottom, right); break;
+                case 3: case 12: add(left, right); break;
+                case 4: case 11: add(top, right); break;
+                case 6: case 9: add(top, bottom); break;
+                case 7: case 8: add(left, top); break;
+                case 5: add(left, top); add(bottom, right); break;
+                case 10: add(top, right); add(left, bottom); break;
+                default: break;
+            }
+        }
+    }
+    return segs;
+}
+
+function drawTopMap() {
+    const obj = activeObject();
+    const canvas = dom.topmapCanvas;
+    if (!obj || obj.globe || !canvas || !obj.layerImage || !obj.nr) return;
+
+    const { meta, nr, nc } = obj;
+    const { lat, lon } = meta.bounds;
+    const thr = state.snowThreshold;
+
+    const cssW = canvas.parentElement.clientWidth - 12;
+    if (cssW <= 0) return;
+    const ml = 40, mr = 8, mt = 6, mb = 26;
+    const mlat = (lat[0] + lat[1]) / 2;
+    // Equal-area-ish aspect, as Plotly's scaleratio = 1 / cos(mean latitude)
+    const ratio = ((lon[1] - lon[0]) * Math.cos(mlat * Math.PI / 180)) / (lat[1] - lat[0]);
+    let plotW = cssW - ml - mr;
+    let plotH = plotW / ratio;
+    if (plotH > 250) { plotH = 250; plotW = plotH * ratio; }
+    const cssH = plotH + mt + mb;
+    const x0 = ml + (cssW - ml - mr - plotW) / 2, y0 = mt;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.height = `${cssH}px`;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    // Layer as a heat map
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(obj.layerImage, x0, y0, plotW, plotH);
+
+    // Grid coordinates (pixel centres) → canvas
+    const gx = (c) => x0 + (c + 0.5) / nc * plotW;
+    const gy = (r) => y0 + (r + 0.5) / nr * plotH;
+    const drawSegs = (segs) => {
+        ctx.beginPath();
+        for (let i = 0; i < segs.length; i += 4) {
+            ctx.moveTo(gx(segs[i]), gy(segs[i + 1]));
+            ctx.lineTo(gx(segs[i + 2]), gy(segs[i + 3]));
+        }
+        ctx.stroke();
+    };
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, plotW, plotH);
+    ctx.clip();
+
+    // Snow boundary at the threshold
+    const snow = obj.snow[state.snowSource];
+    if (snow && state.showSnow) {
+        const p = new Float32Array(snow.length);
+        for (let i = 0; i < snow.length; i++) p[i] = Math.min(snow[i] / GRAY_SCALE, 1);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([]);
+        drawSegs(contourSegments(p, nr, nc, thr));
+    }
+
+    // Snowline isoline at the plane level
+    if (state.planeOn && obj.heights) {
+        ctx.strokeStyle = LEVEL_COLOR;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        drawSegs(contourSegments(obj.heights, nr, nc, state.level));
+        ctx.setLineDash([]);
+    }
+    ctx.restore();
+
+    // Frame and axes
+    ctx.strokeStyle = cssVar('--border-input', '#cbd5e1');
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, plotW - 1, plotH - 1);
+
+    ctx.fillStyle = cssVar('--text-secondary', '#475569');
+    ctx.font = '10px "SF Mono", Menlo, Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ticks(lon[0], lon[1], niceStep(lon[1] - lon[0], 4)).forEach((v) => {
+        const x = x0 + (v - lon[0]) / (lon[1] - lon[0]) * plotW;
+        ctx.fillRect(x, y0 + plotH, 1, 4);
+        ctx.fillText(fmtDeg(v), x, y0 + plotH + 6);
+    });
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ticks(lat[0], lat[1], niceStep(lat[1] - lat[0], 4)).forEach((v) => {
+        const y = y0 + (lat[1] - v) / (lat[1] - lat[0]) * plotH;
+        ctx.fillRect(x0 - 4, y, 4, 1);
+        ctx.fillText(fmtDeg(v), x0 - 6, y);
+    });
+
+    topmap.plot = { x0, y0, plotW, plotH };
+
+    dom.topmapLegendSnow.textContent = `граница снега, p = ${thr.toFixed(2)}`;
+    dom.topmapLegendLevel.textContent = `изолиния снеговой линии, ${state.level.toFixed(2)} км`;
+    dom.topmapLegendLevelRow.style.display = state.planeOn ? '' : 'none';
+}
+
+function onTopMapMove(e) {
+    const obj = activeObject();
+    if (!obj || obj.globe || !topmap.plot) return;
+    const rect = dom.topmapCanvas.getBoundingClientRect();
+    const { x0, y0, plotW, plotH } = topmap.plot;
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    if (x < x0 || x > x0 + plotW || y < y0 || y > y0 + plotH) {
+        dom.topmapReadout.textContent = '';
+        return;
+    }
+    const { lat, lon } = obj.meta.bounds;
+    const c = Math.min(obj.nc - 1, Math.floor((x - x0) / plotW * obj.nc));
+    const r = Math.min(obj.nr - 1, Math.floor((y - y0) / plotH * obj.nr));
+    const la = lat[1] - (y - y0) / plotH * (lat[1] - lat[0]);
+    const lo = lon[0] + (x - x0) / plotW * (lon[1] - lon[0]);
+    const i = r * obj.nc + c;
+    const h = obj.heights ? ` · ${obj.heights[i].toFixed(2)} км` : '';
+    const snow = obj.snow[state.snowSource];
+    const p = snow ? ` · p ${Math.min(snow[i] / GRAY_SCALE, 1).toFixed(2)}` : '';
+    dom.topmapReadout.textContent = `${lo.toFixed(1)}°, ${la.toFixed(1)}°${h}${p}`;
+}
+
+// --------------------------------------------------------------------------
+// Event listeners
 // --------------------------------------------------------------------------
 function initEventListeners() {
-    // Select Layer change
+    dom.themeToggle.addEventListener('click', toggleTheme);
+
     dom.selectLayer.addEventListener('change', (e) => {
-        applyTextureLayer(e.target.value);
+        applyLayer(e.target.value).catch((err) => console.error(err));
     });
 
-    // Select Display Mode
-    dom.selectDisplayMode.addEventListener('change', (e) => {
-        state.material.displayMode = e.target.value;
-        updateWireframeAndPoints();
+    dom.selectSnowSource.addEventListener('change', (e) => {
+        state.snowSource = e.target.value;
+        syncUniforms();
+        updateTelemetry();
+        drawTopMap();
     });
 
-    // Snow Threshold Slider (Modifies 3D model in real time!)
-    dom.sliderSnowThreshold.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        state.snowThreshold = val;
-        dom.valSnowThreshold.textContent = `${val.toFixed(2)} ${val === 0.77 ? '(Оптимум)' : ''}`;
-
-        // Update shader uniform directly at 60 FPS
-        if (state.activeMesh && state.activeMesh.material.userData.shader) {
-            state.activeMesh.material.userData.shader.uniforms.uSnowThreshold.value = val;
-        }
-        updateSnowMetricsDisplay(val);
+    dom.selectViewMode.addEventListener('change', (e) => {
+        state.viewMode = e.target.value;
+        syncUniforms();
     });
 
-    // Roughness Slider
-    dom.sliderRoughness.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        state.material.roughness = val;
-        dom.valRoughness.textContent = val.toFixed(2);
-        if (state.activeMesh) state.activeMesh.material.roughness = val;
+    dom.sliderThreshold.addEventListener('input', (e) => {
+        state.snowThreshold = parseFloat(e.target.value);
+        syncUniforms();
+        updateTelemetry();
+        drawTopMap();
     });
 
-    // Metalness Slider
-    dom.sliderMetalness.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        state.material.metalness = val;
-        dom.valMetalness.textContent = val.toFixed(2);
-        if (state.activeMesh) state.activeMesh.material.metalness = val;
+    dom.sliderExag.addEventListener('input', (e) => {
+        if (!state.activeObjectId) return;
+        state.exag[state.activeObjectId] = parseInt(e.target.value, 10);
+        dom.valExag.textContent = `${e.target.value}×`;
+        scheduleExaggeration();
+        updateTelemetry();
     });
 
-    // Sun Elevation Slider
-    dom.sliderSunElev.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        state.lighting.elevation = val;
-        dom.valSunElev.textContent = `${val.toFixed(0)}°`;
-        updateSunPosition();
+    dom.checkPlane.addEventListener('change', (e) => {
+        state.planeOn = e.target.checked;
+        syncUniforms();
+        updateTelemetry();
+        drawTopMap();
     });
 
-    // Sun Azimuth Timeline Scrubber
-    dom.sliderSunAzimuth.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        state.lighting.azimuth = val;
-        dom.valSunAzimuth.textContent = `${val.toFixed(0)}° Азимут Солнца`;
-        updateSunPosition();
+    dom.sliderLevel.addEventListener('input', (e) => {
+        state.level = parseFloat(e.target.value);
+        syncUniforms();
+        updateTelemetry();
+        drawTopMap();
     });
 
-    // Play / Pause Auto-Rotate
-    dom.btnTimelinePlay.addEventListener('click', () => {
-        state.camera.autoRotate = !state.camera.autoRotate;
-        controls.autoRotate = state.camera.autoRotate;
-        dom.checkAutorotate.checked = state.camera.autoRotate;
-        dom.btnTimelinePlay.classList.toggle('paused', !state.camera.autoRotate);
+    dom.checkShowSnow.addEventListener('change', (e) => {
+        state.showSnow = e.target.checked;
+        syncUniforms();
+        drawTopMap();
     });
 
-    // Checkboxes
-    dom.checkSnowActive.addEventListener('change', (e) => {
-        state.snowOverlayEnabled = e.target.checked;
-        if (state.activeMesh && state.activeMesh.material.userData.shader) {
-            state.activeMesh.material.userData.shader.uniforms.uSnowActive.value = state.snowOverlayEnabled ? 1 : 0;
-        }
+    dom.checkContours.addEventListener('change', (e) => {
+        state.contours = e.target.checked;
+        syncUniforms();
     });
 
-    dom.checkSnowIsolate.addEventListener('change', (e) => {
-        state.snowIsolate = e.target.checked;
-        if (state.activeMesh && state.activeMesh.material.userData.shader) {
-            state.activeMesh.material.userData.shader.uniforms.uSnowIsolate.value = state.snowIsolate ? 1 : 0;
-        }
+    dom.checkGrid.addEventListener('change', (e) => {
+        state.showGrid = e.target.checked;
+        rebuildOverlays();
+    });
+
+    dom.checkFrames.addEventListener('change', (e) => {
+        state.showFrames = e.target.checked;
+        rebuildOverlays();
     });
 
     dom.checkAutorotate.addEventListener('change', (e) => {
-        state.camera.autoRotate = e.target.checked;
-        controls.autoRotate = state.camera.autoRotate;
-        dom.btnTimelinePlay.classList.toggle('paused', !state.camera.autoRotate);
+        state.autoRotate = e.target.checked;
+        controls.autoRotate = state.autoRotate;
     });
 
     dom.checkBsrTracks.addEventListener('change', (e) => {
         state.bsrVisible = e.target.checked;
-        if (bsrOverlay) bsrOverlay.setVisible(state.bsrVisible);
+        const obj = activeObject();
+        if (bsrOverlay) bsrOverlay.setVisible(Boolean(state.bsrVisible && obj && obj.globe));
     });
 
-    // Action Buttons
+    dom.topmapCanvas.addEventListener('mousemove', onTopMapMove);
+    dom.topmapCanvas.addEventListener('mouseleave', () => { dom.topmapReadout.textContent = ''; });
+
     dom.btnExportGlb.addEventListener('click', downloadCurrentGLB);
     dom.btnExportObj.addEventListener('click', exportToOBJ);
     dom.btnSnapshot.addEventListener('click', captureSnapshot);
 
-    // Modal
     dom.btnOpenInfo.addEventListener('click', () => dom.modalBackdrop.classList.add('active'));
     dom.btnCloseModal.addEventListener('click', () => dom.modalBackdrop.classList.remove('active'));
     dom.modalBackdrop.addEventListener('click', (e) => {
         if (e.target === dom.modalBackdrop) dom.modalBackdrop.classList.remove('active');
     });
+
+    // Follow the system theme only while the user has not picked one
+    if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        if (mq.addEventListener) {
+            mq.addEventListener('change', (e) => {
+                let saved = null;
+                try { saved = localStorage.getItem('venus-theme'); } catch (err) { /* ignore */ }
+                if (saved) return;
+                document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+                applyThemeToScene();
+            });
+        }
+    }
 }
 
 // --------------------------------------------------------------------------
-// Export Handlers
+// Export handlers
 // --------------------------------------------------------------------------
 function downloadCurrentGLB() {
-    if (!state.activeModelData) return;
-    const glbUrl = `/export_3d/${state.activeModelData.glb}`;
+    const obj = activeObject();
+    if (!obj) return;
     const a = document.createElement('a');
-    a.href = glbUrl;
-    a.download = state.activeModelData.glb;
+    a.href = `/export_3d/${obj.meta.glb}`;
+    a.download = obj.meta.glb;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 }
 
 function exportToOBJ() {
-    if (!state.activeMesh || !state.activeModelData) {
+    const obj = activeObject();
+    if (!obj) {
         alert('Сначала дождитесь загрузки модели.');
         return;
     }
 
-    const exporter = new OBJExporter();
-    const modelName = state.activeModelData.id;
+    // Bake the current relief exaggeration into the exported geometry
+    const geo = obj.mesh.geometry.clone();
+    if (!obj.globe) geo.scale(1, obj.terrainGroup.scale.y, 1);
+    const exportMesh = new THREE.Mesh(geo);
+    exportMesh.name = obj.meta.id;
+
+    const modelName = obj.meta.id;
     const mtlName = `${modelName}.mtl`;
     const textureName = `${modelName}_${state.activeLayerId}.png`;
 
-    const result = exporter.parse(state.activeMesh, mtlName, textureName);
+    const result = new OBJExporter().parse(exportMesh, mtlName, textureName);
+    geo.dispose();
     OBJExporter.downloadFile(`${modelName}.obj`, result.obj, 'model/obj');
-
-    setTimeout(() => {
-        OBJExporter.downloadFile(mtlName, result.mtl, 'model/mtl');
-    }, 400);
+    setTimeout(() => OBJExporter.downloadFile(mtlName, result.mtl, 'model/mtl'), 400);
 }
 
 function captureSnapshot() {
     renderer.render(scene, camera);
-    const dataUrl = renderer.domElement.toDataURL('image/png');
     const a = document.createElement('a');
-    a.href = dataUrl;
+    a.href = renderer.domElement.toDataURL('image/png');
     a.download = `venus_${state.activeObjectId}_${state.activeLayerId}.png`;
     document.body.appendChild(a);
     a.click();
@@ -767,17 +1494,32 @@ function captureSnapshot() {
 }
 
 // --------------------------------------------------------------------------
-// Animation Loop & Render
+// Render loop
 // --------------------------------------------------------------------------
 function onWindowResize() {
     const container = document.getElementById('app-viewport');
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    camera.aspect = container.clientWidth / container.clientHeight;
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    updateViewOffset();
+    drawTopMap();
+}
 
-    camera.aspect = width / height;
+/** Shifts the projection so the model is centred in the free space between the side panels. */
+function updateViewOffset() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const left = document.querySelector('.main-panel');
+    const right = document.querySelector('.legend-panel');
+    const lr = left ? left.getBoundingClientRect() : null;
+    const rr = right ? right.getBoundingClientRect() : null;
+    const leftEdge = lr && lr.width && lr.right < w * 0.6 ? lr.right : 0;
+    const rightEdge = rr && rr.width ? rr.left : w;
+    if (rightEdge - leftEdge < w * 0.3) {
+        camera.clearViewOffset();
+    } else {
+        const centre = (leftEdge + rightEdge) / 2;
+        camera.setViewOffset(w, h, w / 2 - centre, 0, w, h);
+    }
     camera.updateProjectionMatrix();
-
-    renderer.setSize(width, height);
 }
 
 function animate() {
