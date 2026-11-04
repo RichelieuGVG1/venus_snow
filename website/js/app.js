@@ -427,7 +427,7 @@ function bindDomElements() {
     dom.loadingText = document.getElementById('loading-text');
 
     dom.regionPillContainer = document.getElementById('region-pills');
-    dom.selectRegion = document.getElementById('select-region');
+    //dom.selectRegion = document.getElementById('select-region');
     dom.selectLayer = document.getElementById('select-layer');
     dom.selectDisplayMode = document.getElementById('select-display-mode');
 
@@ -506,16 +506,16 @@ function updateActivePills() {
 
 function populateSelectDropdowns() {
     if (!state.manifest) return;
-
-    // Region Select
-    dom.selectRegion.innerHTML = '';
-    state.manifest.objects.forEach((obj) => {
-        const opt = document.createElement('option');
-        opt.value = obj.id;
-        opt.textContent = obj.name;
-        dom.selectRegion.appendChild(opt);
-    });
-
+    /*
+        // Region Select
+        dom.selectRegion.innerHTML = '';
+        state.manifest.objects.forEach((obj) => {
+            const opt = document.createElement('option');
+            opt.value = obj.id;
+            opt.textContent = obj.name;
+            dom.selectRegion.appendChild(opt);
+        });
+    */
     // Layer Select
     dom.selectLayer.innerHTML = '';
     const layers = state.manifest.layers || {};
@@ -533,7 +533,7 @@ function populateSelectDropdowns() {
 }
 
 function updateSelectInputs() {
-    if (dom.selectRegion) dom.selectRegion.value = state.activeObjectId;
+    //if (dom.selectRegion) dom.selectRegion.value = state.activeObjectId;
     if (dom.selectLayer) dom.selectLayer.value = state.activeLayerId;
 }
 
@@ -603,10 +603,11 @@ function updateSnowMetricsDisplay(threshold) {
 // --------------------------------------------------------------------------
 function initEventListeners() {
     // Select Region change
+    /*
     dom.selectRegion.addEventListener('change', (e) => {
         switchModel(e.target.value);
     });
-
+*/
     // Select Layer change
     dom.selectLayer.addEventListener('change', (e) => {
         applyTextureLayer(e.target.value);
