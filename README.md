@@ -5,9 +5,6 @@
 > **Автор исследования и визуализации:** Vasily Guryanov  
 > **Стек:** Three.js (WebGL), Python 3 (Backend HTTP/Range server), glTF 2.0 / Wavefront OBJ.
 
----
-<img width="431" height="434" alt="image" src="https://github.com/user-attachments/assets/ea0b8882-2111-43e2-af13-d0c2f93755ac" />
-
 ## Быстрый запуск
 
 Сайт запускается одной стандартной командой без необходимости установки сторонних библиотек:
