@@ -54,7 +54,7 @@
   --grid-line: #0f172a;
   --grid-line-opacity: 0.28;
   --grid-label: #334155;
-  --frame-line: #0284c7;
+  --frame-line: #1dcce0;   /* same as the dark theme */
 }
 
 /* --------------------------------------------------------------------------
