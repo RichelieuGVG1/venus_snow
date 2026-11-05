@@ -313,7 +313,7 @@ function initThreeScene() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.autoRotate = state.autoRotate;
-    controls.autoRotateSpeed = 0.5;
+    controls.autoRotateSpeed = -0.5;
 
     // Even fill lighting: a strong ambient term plus a soft "headlight" that
     // follows the camera, so every model is lit the same from any angle while
