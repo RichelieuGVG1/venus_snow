@@ -29,6 +29,15 @@ const LAYER_ORDER = ['elev', 'snow_prob', 'anomaly', 'cluster', 'emis', 'eps_ref
 const SNOW_SOURCES = { snow_prob: 'snow_prob_gray', anomaly: 'anomaly_gray' };
 const SNOW_RAMP = ['#ff2d95', '#ff8fcf', '#ffd6ef', '#ffffff'];   // p = threshold … 1
 const LEVEL_COLOR = '#4fc3f7';
+
+// Globe relief in the light theme: the dark elevation palette of the texture is
+// re-mapped onto a warm Magellan-style orange-gold palette. Each texel's place on
+// the original ramp is recovered from its brightness, lifted by RELIEF_GAMMA
+// (most of Venus lies in the dark lowland part of the ramp) and re-coloured.
+const RELIEF_RAMP_DARK = ['#1b0f08', '#4a2410', '#8a4a1c', '#c98a3a', '#ecc98a', '#fff6e5']; // as in the texture
+const RELIEF_RAMP_LIGHT = ['#3f1a05', '#8a4512', '#c0702a', '#e09a3c', '#f4c46a', '#fff2c8'];
+const RELIEF_GAMMA = 0.5;
+const THEME_FADE_MS = 300;       // matches the 0.3 s CSS theme transition
 const EXAG_RANGES = {
     globe: { min: 0, max: 120, step: 5 },
     region: { min: 0, max: 60, step: 1 }
@@ -81,8 +90,12 @@ const uniforms = {
     uSnowRamp1: { value: new THREE.Color(SNOW_RAMP[1]) },
     uSnowRamp2: { value: new THREE.Color(SNOW_RAMP[2]) },
     uSnowRamp3: { value: new THREE.Color(SNOW_RAMP[3]) },
-    uLevelColor: { value: new THREE.Color(LEVEL_COLOR) }
+    uLevelColor: { value: new THREE.Color(LEVEL_COLOR) },
+    uReliefLight: { value: 0 }     // 0 = original palette, 1 = light-theme palette (globe elevation only)
 };
+
+// 0 … 1, animated between the themes; drives the globe relief palette
+const themeBlend = { value: 0, frame: 0 };
 
 const dom = {};
 
@@ -189,9 +202,84 @@ function toggleTheme() {
 }
 
 function applyThemeToScene() {
-    if (scene) scene.background = new THREE.Color(cssVar('--scene-bg', '#e8edf5'));
     rebuildOverlays();
     drawTopMap();
+    animateTheme(currentTheme() === 'light' ? 1 : 0);
+}
+
+/** Smoothly fades the scene background and the globe relief palette to the current theme. */
+function animateTheme(target) {
+    cancelAnimationFrame(themeBlend.frame);
+    const from = themeBlend.value;
+    const bgFrom = scene && scene.background ? scene.background.clone() : null;
+    const bgTo = new THREE.Color(cssVar('--scene-bg', '#e8edf5'));
+    const t0 = performance.now();
+
+    const step = (now) => {
+        const k = Math.min((now - t0) / THEME_FADE_MS, 1);
+        const e = k * k * (3 - 2 * k);                      // smoothstep easing
+        themeBlend.value = from + (target - from) * e;
+        if (scene) scene.background = bgFrom ? bgFrom.clone().lerp(bgTo, e) : bgTo.clone();
+        syncReliefPalette();
+        if (k < 1) themeBlend.frame = requestAnimationFrame(step);
+    };
+    themeBlend.frame = requestAnimationFrame(step);
+}
+
+/** Relief recolouring applies to the elevation layer of the globe only. */
+function reliefRecolorActive() {
+    const obj = activeObject();
+    return Boolean(obj && obj.globe && state.activeLayerId === 'elev');
+}
+
+function syncReliefPalette() {
+    uniforms.uReliefLight.value = reliefRecolorActive() ? themeBlend.value : 0;
+    updateLegendBar();
+}
+
+// Palette helpers (sRGB, 0 … 1)
+function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+}
+
+function sampleRamp(ramp, t) {
+    const x = Math.min(Math.max(t, 0), 1) * (ramp.length - 1);
+    const i = Math.min(Math.floor(x), ramp.length - 2);
+    const f = x - i;
+    const a = hexToRgb(ramp[i]), b = hexToRgb(ramp[i + 1]);
+    return a.map((v, j) => v + (b[j] - v) * f);
+}
+
+function rgbCss(rgb) {
+    return `rgb(${rgb.map((v) => Math.round(v * 255)).join(', ')})`;
+}
+
+/** Ramp → GLSL function returning the colour at t (sRGB). */
+function glslRamp(name, ramp) {
+    const n = ramp.length - 1;
+    const v = (h) => `vec3(${hexToRgb(h).map((x) => x.toFixed(4)).join(', ')})`;
+    let body = `float x = clamp(t, 0.0, 1.0) * ${n}.0;\n`;
+    for (let i = 0; i < n - 1; i++) {
+        body += `if (x < ${i + 1}.0) return mix(${v(ramp[i])}, ${v(ramp[i + 1])}, x - ${i}.0);\n`;
+    }
+    body += `return mix(${v(ramp[n - 1])}, ${v(ramp[n])}, x - ${n - 1}.0);`;
+    return `vec3 ${name}(float t) {\n${body}\n}`;
+}
+
+/** GLSL: brightness of a dark-ramp colour → its position t on the ramp. */
+function glslRampInverse(name, ramp) {
+    const lum = ramp.map((h) => {
+        const [r, g, b] = hexToRgb(h);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    });
+    const n = ramp.length - 1;
+    let body = `if (L <= ${lum[0].toFixed(5)}) return 0.0;\n`;
+    for (let i = 0; i < n; i++) {
+        body += `if (L < ${lum[i + 1].toFixed(5)}) return (${i}.0 + (L - ${lum[i].toFixed(5)}) / ${(lum[i + 1] - lum[i]).toFixed(5)}) / ${n}.0;\n`;
+    }
+    body += 'return 1.0;';
+    return `float ${name}(float L) {\n${body}\n}`;
 }
 
 // --------------------------------------------------------------------------
@@ -204,6 +292,7 @@ function initThreeScene() {
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(cssVar('--scene-bg', '#e8edf5'));
+    themeBlend.value = currentTheme() === 'light' ? 1 : 0;
 
     camera = new THREE.PerspectiveCamera(42, width / height, 0.01, 5000);
     camera.position.set(2.2, 1.4, 2.8);
@@ -407,8 +496,19 @@ function createTerrainMaterial(baseTexture) {
             uniform vec3 uSnowRamp2;
             uniform vec3 uSnowRamp3;
             uniform vec3 uLevelColor;
+            uniform float uReliefLight;
             varying vec2 vSnowUv;
             varying float vHeightKm;
+
+            ${glslRampInverse('reliefRampPos', RELIEF_RAMP_DARK)}
+            ${glslRamp('reliefRampLight', RELIEF_RAMP_LIGHT)}
+
+            vec3 toSrgb(vec3 c) {
+                return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+            }
+            vec3 toLinear(vec3 c) {
+                return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+            }
 
             vec3 snowRamp(float t) {
                 if (t < 1.0 / 3.0) return mix(uSnowRamp0, uSnowRamp1, t * 3.0);
@@ -419,6 +519,14 @@ function createTerrainMaterial(baseTexture) {
             '#include <map_fragment>',
             `
             #include <map_fragment>
+
+            // Globe relief: blend towards the light-theme palette
+            if (uReliefLight > 0.001) {
+                vec3 srgb = toSrgb(clamp(diffuseColor.rgb, 0.0, 1.0));
+                float rampT = reliefRampPos(dot(srgb, vec3(0.2126, 0.7152, 0.0722)));
+                vec3 lightCol = toLinear(reliefRampLight(pow(rampT, ${RELIEF_GAMMA.toFixed(3)})));
+                diffuseColor.rgb = mix(diffuseColor.rgb, lightCol, uReliefLight);
+            }
 
             float snowP = min(texture2D(uSnowMap, vSnowUv).r * (255.0 / ${GRAY_SCALE}.0), 1.0);
             bool isSnow = uSnowOn == 1 && snowP >= uThreshold;
@@ -734,6 +842,7 @@ function syncUniforms() {
     uniforms.uPlaneOn.value = !obj.globe && state.planeOn ? 1 : 0;
     uniforms.uLevel.value = state.level;
     uniforms.uBaseExag.value = obj.globe ? 1 : obj.baseExag;
+    uniforms.uReliefLight.value = reliefRecolorActive() ? themeBlend.value : 0;
 
     if (obj.globe) {
         uniforms.uUvScale.value.set(1, 1);
@@ -1220,6 +1329,27 @@ function fmtNum(v, digits = 0) {
     return v.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+/** Continuous legend bar; for the globe relief it follows the theme blend. */
+function updateLegendBar() {
+    const lInfo = (state.manifest && state.manifest.layers || {})[state.activeLayerId];
+    if (!lInfo || lInfo.type === 'categorical') return;
+    const colors = lInfo.colors || ['#000000', '#ffffff'];
+    const k = uniforms.uReliefLight.value;
+    if (k <= 0.001) {
+        dom.legendBar.style.background = `linear-gradient(90deg, ${colors.join(', ')})`;
+        return;
+    }
+    const stops = [];
+    const N = 16;
+    for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const a = sampleRamp(colors, t);
+        const b = sampleRamp(RELIEF_RAMP_LIGHT, Math.pow(t, RELIEF_GAMMA));
+        stops.push(`${rgbCss(a.map((v, j) => v + (b[j] - v) * k))} ${(t * 100).toFixed(1)}%`);
+    }
+    dom.legendBar.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
 function updateLegend() {
     const layers = state.manifest.layers || {};
     const lInfo = layers[state.activeLayerId];
@@ -1245,7 +1375,7 @@ function updateLegend() {
     } else {
         dom.legendCategorical.style.display = 'none';
         dom.legendContinuousWrap.style.display = 'flex';
-        dom.legendBar.style.background = `linear-gradient(90deg, ${(lInfo.colors || ['#000', '#fff']).join(', ')})`;
+        updateLegendBar();
         const [a, b] = lInfo.range || [0, 1];
         const digits = Math.abs(b - a) < 2 ? 2 : 1;
         dom.legendTicks.innerHTML = '';
