@@ -389,15 +389,15 @@ $$m_c = \frac{|E_R - E_L|}{E_R + E_L}$$
 <p>
 <img width="49%" alt="Рисунок 34. Главная страница атласа: глобус Венеры со слоем металлического снега." title="Рисунок 34. Главная страница атласа: глобус Венеры со слоем металлического снега." src="https://github.com/user-attachments/assets/5eb81626-4715-4982-9870-1fab25e7b117" />
 
-<img width="49%" src="[docs/screenshots/02_layer_switch.png](https://github.com/user-attachments/assets/30c559ad-146b-4843-abc4-b9ca0d5dff18)" alt="Рисунок 35. Переключение текстурных слоев на глобусе." title="Рисунок 35. Переключение текстурных слоев на глобусе.">
+<img width="49%" src="https://github.com/user-attachments/assets/30c559ad-146b-4843-abc4-b9ca0d5dff18" alt="Рисунок 35. Переключение текстурных слоев на глобусе." title="Рисунок 35. Переключение текстурных слоев на глобусе.">
 </p>
 
 
 *Слева – рисунок 34. Главная страница атласа: глобус Венеры со слоем металлического снега; справа – рисунок 35. Переключение текстурных слоев на глобусе.*
 
 <p>
-<img width="49%" src="[venus_snow/figures/11_textures_preview.png](https://github.com/user-attachments/assets/64cea7db-db44-4b0f-be31-bbfef3db407a)" alt="Рисунок 36. Текстуры слоев одной модели: геометрия общая, меняется только картинка." title="Рисунок 36. Текстуры слоев одной модели: геометрия общая, меняется только картинка.">
-<img width="49%" src="[docs/screenshots/03_maxwell_region.png](https://github.com/user-attachments/assets/913d20e3-c18f-46d9-afae-596d47c48c1d)" alt="Рисунок 37. Модель гор Максвелла с плоскостью снеговой линии." title="Рисунок 37. Модель гор Максвелла с плоскостью снеговой линии.">
+<img width="49%" src="https://github.com/user-attachments/assets/64cea7db-db44-4b0f-be31-bbfef3db407a" alt="Рисунок 36. Текстуры слоев одной модели: геометрия общая, меняется только картинка." title="Рисунок 36. Текстуры слоев одной модели: геометрия общая, меняется только картинка.">
+<img width="49%" src="https://github.com/user-attachments/assets/913d20e3-c18f-46d9-afae-596d47c48c1d" alt="Рисунок 37. Модель гор Максвелла с плоскостью снеговой линии." title="Рисунок 37. Модель гор Максвелла с плоскостью снеговой линии.">
 </p>
 
 
@@ -442,7 +442,7 @@ $$m_c = \frac{|E_R - E_L|}{E_R + E_L}$$
 - **Бистатический радар (BSR):** орбитальные пролеты «Магеллана» (орбиты 4156130b, 4156155b, 4156191b) с цветовой шкалой $m_c$.
 
 <p>
-<img width="49%" src="[docs/screenshots/04_bsr_overlay.png](https://github.com/user-attachments/assets/1eeee685-2bb5-41c8-8bca-f9cd3d1dd03f)" alt="Рисунок 38. Треки бистатического радара поверх модели гор Максвелла." title="Рисунок 38. Треки бистатического радара поверх модели гор Максвелла.">
+<img width="49%" src="https://github.com/user-attachments/assets/1eeee685-2bb5-41c8-8bca-f9cd3d1dd03f" alt="Рисунок 38. Треки бистатического радара поверх модели гор Максвелла." title="Рисунок 38. Треки бистатического радара поверх модели гор Максвелла.">
 
 
 
@@ -460,15 +460,9 @@ $$m_c = \frac{|E_R - E_L|}{E_R + E_L}$$
 <p align="center"><img width="50%" src="https://github.com/user-attachments/assets/62510c87-94b7-48f6-9c29-7a1cddfa6dd6" alt="Рисунок 40. Панель экспорта моделей и текстур." title="Рисунок 40. Панель экспорта моделей и текстур."></p>
 
 
-<p align="center"><img width="100%" src="![Uploading image.png…]()
-" alt="Рисунок 41. Панель справа" title="Рисунок 41. Панель справа"></p>
+<p align="center"><img width="100%" src="https://github.com/user-attachments/assets/e0dc372f-30e1-4990-ba46-0d46b44517f9" alt="Рисунок 41. Панель справа" title="Рисунок 41. Панель справа"></p>
 
 
-
-
-
-
-![Uploading image.png…]()
 
 ---
 
