@@ -1027,10 +1027,44 @@ body.scope-region [data-scope="globe"] {
   pointer-events: none;
 }
 /* --------------------------------------------------------------------------
-   Link to the full text of the research paper (globe only)
+   Right column: legend card + separate card with the paper link
    -------------------------------------------------------------------------- */
-.paper-block {
-  gap: 8px;
+.right-column {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: 340px;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* The legend now sits inside the column instead of being positioned itself */
+.right-column > .legend-panel {
+  position: static;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+.paper-panel {
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-card);
+  box-shadow: var(--shadow-card);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: auto;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .paper-link {
@@ -1038,11 +1072,11 @@ body.scope-region [data-scope="globe"] {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--primary-blue);
-  background: var(--bg-card);
+  background: var(--bg-card-subtle);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   text-decoration: none;
@@ -1057,11 +1091,17 @@ body.scope-region [data-scope="globe"] {
 
 .paper-link:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
   border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
 }
 
 .paper-link-arrow {
   font-family: var(--font-mono);
   font-size: 13px;
+}
+
+@media (max-width: 960px) {
+  .right-column {
+    display: none;
+  }
 }
