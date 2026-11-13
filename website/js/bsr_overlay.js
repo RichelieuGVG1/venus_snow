@@ -30,9 +30,9 @@ export class BSROverlay {
 
     /**
      * Loads the BSR tracks JSON from the API or local file.
-     * @param {string} [url='/api/bsr']
+     * @param {string} [url='data/bsr.json']
      */
-    async load(url = '/data/bsr.json') {
+    async load(url = 'data/bsr.json') {
         try {
             const resp = await fetch(url);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

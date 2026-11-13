@@ -12,9 +12,9 @@
  * Author: Vasily Guryanov
  */
 
-import * as THREE from '/vendor/three.module.js';
-import { OrbitControls } from '/vendor/OrbitControls.js';
-import { GLTFLoader } from '/vendor/GLTFLoader.js';
+import * as THREE from '../vendor/three.module.js';
+import { OrbitControls } from '../vendor/OrbitControls.js';
+import { GLTFLoader } from '../vendor/GLTFLoader.js';
 import { OBJExporter } from './obj_exporter.js';
 import { BSROverlay } from './bsr_overlay.js';
 
@@ -340,14 +340,11 @@ function initThreeScene() {
 // --------------------------------------------------------------------------
 async function loadManifest() {
     try {
-        const resp = await fetch('/data/regions.json')
+        const resp = await fetch('data/manifest.json');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         state.manifest = await resp.json();
     } catch (err) {
-        console.warn('Fallback to /api/manifest...', err);
-        const mResp = await fetch('/api/manifest');
-        if (!mResp.ok) throw new Error(`Не удалось получить manifest: HTTP ${mResp.status}`);
-        state.manifest = await mResp.json();
+        throw new Error(`Не удалось получить manifest: ${err.message}`);
     }
     const snow = state.manifest.snow || {};
     if (typeof snow.default_threshold === 'number') state.snowThreshold = snow.default_threshold;
@@ -569,7 +566,7 @@ async function loadObject(meta) {
     if (objects[meta.id]) return objects[meta.id];
 
     updateLoadingProgress(`Загрузка 3D-модели: ${meta.name}...`);
-    const gltf = await new GLTFLoader().loadAsync(`/export_3d/${meta.glb}`);
+    const gltf = await new GLTFLoader().loadAsync(`export_3d/${meta.glb}`);
 
     let mesh = null;
     gltf.scene.traverse((node) => {
@@ -654,7 +651,7 @@ async function loadObject(meta) {
 async function loadLayerTexture(meta, layerId) {
     const textures = meta.textures || {};
     const rel = textures[layerId] || textures.elev;
-    const tex = await loadTexture(`/export_3d/${rel}`, { nearest: layerId === 'cluster' });
+    const tex = await loadTexture(`export_3d/${rel}`, { nearest: layerId === 'cluster' });
     if (!isGlobe(meta)) applyPixelCenterUv(tex);
     return tex;
 }
@@ -677,7 +674,7 @@ async function prepareObjectData(obj) {
     for (const [src, texKey] of Object.entries(SNOW_SOURCES)) {
         const rel = meta.textures && meta.textures[texKey];
         if (!rel) continue;
-        const tex = await loadTexture(`/export_3d/${rel}`, { isData: true });
+        const tex = await loadTexture(`export_3d/${rel}`, { isData: true });
         const { data, width, height } = readImageChannel(tex.image, 0);
         obj.snow[src] = data;
         obj.snowTex[src] = tex;
@@ -731,7 +728,7 @@ async function prepareObjectData(obj) {
         // Emissivity for the "above / below the plane" statistic
         const emisInfo = state.manifest.layers && state.manifest.layers.emis;
         if (emisInfo && meta.textures.emis) {
-            const tex = await loadTexture(`/export_3d/${meta.textures.emis}`);
+            const tex = await loadTexture(`export_3d/${meta.textures.emis}`);
             if (tex.image.width === nc && tex.image.height === nr) {
                 obj.emis = decodeColorMapped(tex.image, emisInfo);
             }
@@ -1732,7 +1729,7 @@ function downloadCurrentGLB() {
     const obj = activeObject();
     if (!obj) return;
     const a = document.createElement('a');
-    a.href = `/export_3d/${obj.meta.glb}`;
+    a.href = `export_3d/${obj.meta.glb}`;
     a.download = obj.meta.glb;
     document.body.appendChild(a);
     a.click();
