@@ -181,6 +181,7 @@
   <!-- ========================================================================
        Right Floating Card: Legend, Snow Threshold, Telemetry & Top-down Map
        ======================================================================== -->
+  <div class="right-column">
   <aside class="legend-panel">
     <div class="legend-panel-header">
       <span>ЛЕГЕНДА КАРТЫ</span>
@@ -210,18 +211,6 @@
 
     <div class="telemetry-grid" id="telemetry"></div>
 
-    <!-- Full text of the research paper (globe only) -->
-    <div class="slider-block paper-block" data-scope="globe">
-      <div class="slider-header">
-        <span class="slider-title">Полноценный текст научной работы</span>
-      </div>
-      <!-- ВСТАВЬТЕ ССЫЛКУ НА РАБОТУ В href -->
-      <a class="paper-link" id="paper-link" href="" target="_blank" rel="noopener">
-        <span>Открыть текст работы</span>
-        <span class="paper-link-arrow" aria-hidden="true">↗</span>
-      </a>
-    </div>
-
     <!-- Top-down map (regions only) -->
     <div class="topmap-section" data-scope="region">
       <div class="legend-panel-header">
@@ -240,6 +229,19 @@
       </div>
     </div>
   </aside>
+
+  <!-- Separate card under the legend: full text of the research paper (globe only) -->
+  <aside class="paper-panel" data-scope="globe">
+    <div class="legend-panel-header">
+      <span>Полноценный текст научной работы</span>
+    </div>
+    <!-- ВСТАВЬТЕ ССЫЛКУ НА РАБОТУ В href -->
+    <a class="paper-link" id="paper-link" href="" target="_blank" rel="noopener">
+      <span>Открыть текст работы</span>
+      <span class="paper-link-arrow" aria-hidden="true">↗</span>
+    </a>
+  </aside>
+  </div>
 
   <!-- ========================================================================
        Loading Progress Overlay
