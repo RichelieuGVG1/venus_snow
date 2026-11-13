@@ -1026,3 +1026,42 @@ body.scope-region [data-scope="globe"] {
 .form-group.is-disabled * {
   pointer-events: none;
 }
+/* --------------------------------------------------------------------------
+   Link to the full text of the research paper (globe only)
+   -------------------------------------------------------------------------- */
+.paper-block {
+  gap: 8px;
+}
+
+.paper-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-blue);
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.paper-link:hover {
+  color: var(--primary-blue-hover);
+  border-color: var(--border-focus);
+  background: var(--primary-blue-soft);
+}
+
+.paper-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+  border-color: var(--border-focus);
+}
+
+.paper-link-arrow {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
