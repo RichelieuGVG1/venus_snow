@@ -1,0 +1,435 @@
+{
+  "title": "Venus — metallic snow & surface types (Magellan GxDR + ML)",
+  "coordinate_system": "glTF, Y up. Globe: unit sphere (1 = 6051 km), +X → (0°N, 0°E), +Y → North pole. Regions: kilometres, origin at region centre, +X east, −Z north, Y = height × exaggeration.",
+  "uv": "TEXCOORD_0 in glTF convention: (0,0) = north-west corner = top-left pixel of every PNG. All layer textures of an object share this UV; in three.js load them with texture.flipY = false.",
+  "snow": {
+    "default_threshold": 0.77,
+    "model": "HistGB",
+    "gray_encoding": "probability = pixel / 255",
+    "sources": {
+      "snow_prob_gray": "ML classifier",
+      "anomaly_gray": "unsupervised anomaly percentile"
+    }
+  },
+  "layers": {
+    "elev": {
+      "title": "высота, км",
+      "type": "continuous",
+      "range": [
+        -1.124000072479248,
+        11.285499572753906
+      ],
+      "colors": [
+        "#1b0f08",
+        "#4a2410",
+        "#8a4a1c",
+        "#c98a3a",
+        "#ecc98a",
+        "#fff6e5"
+      ]
+    },
+    "snow_prob": {
+      "title": "вероятность снега",
+      "type": "continuous",
+      "range": [
+        0.0,
+        1.0
+      ],
+      "colors": [
+        "#000004",
+        "#420a68",
+        "#932667",
+        "#dd513a",
+        "#fca50a",
+        "#fcffa4"
+      ]
+    },
+    "anomaly": {
+      "title": "перцентиль аномальности",
+      "type": "continuous",
+      "range": [
+        0.5,
+        1.0
+      ],
+      "colors": [
+        "#0b0b0b",
+        "#5c0d0d",
+        "#b3200e",
+        "#f2600b",
+        "#ffc23d",
+        "#ffffcc"
+      ]
+    },
+    "cluster": {
+      "title": "тип поверхности",
+      "type": "categorical",
+      "range": [
+        -0.5,
+        2.5
+      ],
+      "colors": [
+        "#2b6cb0",
+        "#38a169",
+        "#d69e2e"
+      ],
+      "labels": [
+        "гладкие низменные равнины",
+        "шероховатый рельеф (тессеры, рифты)",
+        "высокогорья с низкой излучательной способностью (кандидаты металлического снега)"
+      ]
+    },
+    "emis": {
+      "title": "излучательная способность",
+      "type": "continuous",
+      "range": [
+        0.41890764236450195,
+        0.9130250215530396
+      ],
+      "colors": [
+        "#0d0887",
+        "#6a00a8",
+        "#b12a90",
+        "#e16462",
+        "#fca636",
+        "#f0f921"
+      ]
+    },
+    "eps_refl": {
+      "title": "диэлектрическая проницаемость",
+      "type": "continuous",
+      "range": [
+        2.794816017150879,
+        50.733741760253906
+      ],
+      "colors": [
+        "#000004",
+        "#420a68",
+        "#932667",
+        "#dd513a",
+        "#fca50a",
+        "#fcffa4"
+      ]
+    },
+    "refl_norm": {
+      "title": "отражательная способность Френеля",
+      "type": "continuous",
+      "range": [
+        0.06321839243173599,
+        0.5681818127632141
+      ],
+      "colors": [
+        "#00224e",
+        "#35456c",
+        "#666970",
+        "#948e77",
+        "#c8b866",
+        "#fee838"
+      ]
+    },
+    "slope": {
+      "title": "rms-уклон, °",
+      "type": "continuous",
+      "range": [
+        0.800000011920929,
+        8.125
+      ],
+      "colors": [
+        "#440154",
+        "#414487",
+        "#2a788e",
+        "#22a884",
+        "#7ad151",
+        "#fde725"
+      ]
+    }
+  },
+  "objects": [
+    {
+      "id": "globe",
+      "name": "Глобус Венеры",
+      "type": "globe",
+      "glb": "venus_globe.glb",
+      "textures": {
+        "elev": "textures/globe/elev.png",
+        "snow_prob": "textures/globe/snow_prob.png",
+        "anomaly": "textures/globe/anomaly.png",
+        "cluster": "textures/globe/cluster.png",
+        "emis": "textures/globe/emis.png",
+        "eps_refl": "textures/globe/eps_refl.png",
+        "refl_norm": "textures/globe/refl_norm.png",
+        "slope": "textures/globe/slope.png",
+        "elev_snow": "textures/globe/elev_snow.png",
+        "snow_prob_gray": "textures/globe/snow_prob_gray.png",
+        "anomaly_gray": "textures/globe/anomaly_gray.png",
+        "height16": "textures/globe/height16.png"
+      },
+      "exaggeration": 40,
+      "height_range_km": [
+        -2.875999927520752,
+        11.285499572753906
+      ],
+      "mesh_res_deg": 0.5,
+      "vertices": 259560,
+      "triangles": 516960,
+      "snow_area_km2_default": 12502545.71454814
+    },
+    {
+      "id": "region_gory_maksvella",
+      "name": "Горы Максвелла",
+      "type": "region",
+      "glb": "region_gory_maksvella.glb",
+      "textures": {
+        "elev": "textures/region_gory_maksvella/elev.png",
+        "snow_prob": "textures/region_gory_maksvella/snow_prob.png",
+        "anomaly": "textures/region_gory_maksvella/anomaly.png",
+        "cluster": "textures/region_gory_maksvella/cluster.png",
+        "emis": "textures/region_gory_maksvella/emis.png",
+        "eps_refl": "textures/region_gory_maksvella/eps_refl.png",
+        "refl_norm": "textures/region_gory_maksvella/refl_norm.png",
+        "slope": "textures/region_gory_maksvella/slope.png",
+        "elev_snow": "textures/region_gory_maksvella/elev_snow.png",
+        "snow_prob_gray": "textures/region_gory_maksvella/snow_prob_gray.png",
+        "anomaly_gray": "textures/region_gory_maksvella/anomaly_gray.png",
+        "height16": "textures/region_gory_maksvella/height16.png"
+      },
+      "bounds": {
+        "lat": [
+          60.05,
+          69.95
+        ],
+        "lon": [
+          -7.949999999999989,
+          13.950000000000017
+        ]
+      },
+      "center": {
+        "lat": 65.0,
+        "lon": 3.0000000000000115
+      },
+      "exaggeration": 6,
+      "height_range_km": [
+        0.011500000953674316,
+        11.285499572753906
+      ],
+      "snowline_km": 5.508293838557411,
+      "snow_area_km2_default": 533890.4441987842,
+      "vertices": 22000,
+      "triangles": 43362
+    },
+    {
+      "id": "region_oblast_ovda",
+      "name": "Область Овда",
+      "type": "region",
+      "glb": "region_oblast_ovda.glb",
+      "textures": {
+        "elev": "textures/region_oblast_ovda/elev.png",
+        "snow_prob": "textures/region_oblast_ovda/snow_prob.png",
+        "anomaly": "textures/region_oblast_ovda/anomaly.png",
+        "cluster": "textures/region_oblast_ovda/cluster.png",
+        "emis": "textures/region_oblast_ovda/emis.png",
+        "eps_refl": "textures/region_oblast_ovda/eps_refl.png",
+        "refl_norm": "textures/region_oblast_ovda/refl_norm.png",
+        "slope": "textures/region_oblast_ovda/slope.png",
+        "elev_snow": "textures/region_oblast_ovda/elev_snow.png",
+        "snow_prob_gray": "textures/region_oblast_ovda/snow_prob_gray.png",
+        "anomaly_gray": "textures/region_oblast_ovda/anomaly_gray.png",
+        "height16": "textures/region_oblast_ovda/height16.png"
+      },
+      "bounds": {
+        "lat": [
+          -14.950000000000003,
+          4.949999999999989
+        ],
+        "lon": [
+          60.05000000000001,
+          109.94999999999999
+        ]
+      },
+      "center": {
+        "lat": -5.000000000000005,
+        "lon": 85.0
+      },
+      "exaggeration": 6,
+      "height_range_km": [
+        -2.2985000610351562,
+        6.186500072479248
+      ],
+      "snowline_km": 3.884299967329224,
+      "snow_area_km2_default": 4489197.320708323,
+      "vertices": 100000,
+      "triangles": 198602
+    },
+    {
+      "id": "region_oblast_tetis",
+      "name": "Область Тетис",
+      "type": "region",
+      "glb": "region_oblast_tetis.glb",
+      "textures": {
+        "elev": "textures/region_oblast_tetis/elev.png",
+        "snow_prob": "textures/region_oblast_tetis/snow_prob.png",
+        "anomaly": "textures/region_oblast_tetis/anomaly.png",
+        "cluster": "textures/region_oblast_tetis/cluster.png",
+        "emis": "textures/region_oblast_tetis/emis.png",
+        "eps_refl": "textures/region_oblast_tetis/eps_refl.png",
+        "refl_norm": "textures/region_oblast_tetis/refl_norm.png",
+        "slope": "textures/region_oblast_tetis/slope.png",
+        "elev_snow": "textures/region_oblast_tetis/elev_snow.png",
+        "snow_prob_gray": "textures/region_oblast_tetis/snow_prob_gray.png",
+        "anomaly_gray": "textures/region_oblast_tetis/anomaly_gray.png",
+        "height16": "textures/region_oblast_tetis/height16.png"
+      },
+      "bounds": {
+        "lat": [
+          -19.950000000000003,
+          -0.05000000000001137
+        ],
+        "lon": [
+          110.05000000000001,
+          149.95000000000005
+        ]
+      },
+      "center": {
+        "lat": -10.000000000000007,
+        "lon": 130.0
+      },
+      "exaggeration": 6,
+      "height_range_km": [
+        -2.4375,
+        7.141250133514404
+      ],
+      "snowline_km": 3.7589650874717178,
+      "snow_area_km2_default": 3096516.399867883,
+      "vertices": 80000,
+      "triangles": 158802
+    },
+    {
+      "id": "region_oblast_beta",
+      "name": "Область Бета",
+      "type": "region",
+      "glb": "region_oblast_beta.glb",
+      "textures": {
+        "elev": "textures/region_oblast_beta/elev.png",
+        "snow_prob": "textures/region_oblast_beta/snow_prob.png",
+        "anomaly": "textures/region_oblast_beta/anomaly.png",
+        "cluster": "textures/region_oblast_beta/cluster.png",
+        "emis": "textures/region_oblast_beta/emis.png",
+        "eps_refl": "textures/region_oblast_beta/eps_refl.png",
+        "refl_norm": "textures/region_oblast_beta/refl_norm.png",
+        "slope": "textures/region_oblast_beta/slope.png",
+        "elev_snow": "textures/region_oblast_beta/elev_snow.png",
+        "snow_prob_gray": "textures/region_oblast_beta/snow_prob_gray.png",
+        "anomaly_gray": "textures/region_oblast_beta/anomaly_gray.png",
+        "height16": "textures/region_oblast_beta/height16.png"
+      },
+      "bounds": {
+        "lat": [
+          15.049999999999997,
+          34.949999999999996
+        ],
+        "lon": [
+          -89.94999999999999,
+          -65.05
+        ]
+      },
+      "center": {
+        "lat": 24.999999999999996,
+        "lon": -77.5
+      },
+      "exaggeration": 6,
+      "height_range_km": [
+        -2.6167500019073486,
+        6.562999725341797
+      ],
+      "snowline_km": 4.262850653118426,
+      "snow_area_km2_default": 1061340.342641428,
+      "vertices": 50000,
+      "triangles": 99102
+    },
+    {
+      "id": "region_oblast_atla_maat",
+      "name": "Область Атла (Маат)",
+      "type": "region",
+      "glb": "region_oblast_atla_maat.glb",
+      "textures": {
+        "elev": "textures/region_oblast_atla_maat/elev.png",
+        "snow_prob": "textures/region_oblast_atla_maat/snow_prob.png",
+        "anomaly": "textures/region_oblast_atla_maat/anomaly.png",
+        "cluster": "textures/region_oblast_atla_maat/cluster.png",
+        "emis": "textures/region_oblast_atla_maat/emis.png",
+        "eps_refl": "textures/region_oblast_atla_maat/eps_refl.png",
+        "refl_norm": "textures/region_oblast_atla_maat/refl_norm.png",
+        "slope": "textures/region_oblast_atla_maat/slope.png",
+        "elev_snow": "textures/region_oblast_atla_maat/elev_snow.png",
+        "snow_prob_gray": "textures/region_oblast_atla_maat/snow_prob_gray.png",
+        "anomaly_gray": "textures/region_oblast_atla_maat/anomaly_gray.png",
+        "height16": "textures/region_oblast_atla_maat/height16.png"
+      },
+      "bounds": {
+        "lat": [
+          -4.950000000000003,
+          19.950000000000003
+        ],
+        "lon": [
+          -171.95,
+          -150.05
+        ]
+      },
+      "center": {
+        "lat": 7.499999999999994,
+        "lon": -161.0
+      },
+      "exaggeration": 6,
+      "height_range_km": [
+        -2.875999927520752,
+        9.663749694824219
+      ],
+      "snowline_km": 3.737817638935412,
+      "snow_area_km2_default": 1287932.6505903495,
+      "vertices": 55000,
+      "triangles": 109062
+    },
+    {
+      "id": "region_gora_gula",
+      "name": "Гора Гула",
+      "type": "region",
+      "glb": "region_gora_gula.glb",
+      "textures": {
+        "elev": "textures/region_gora_gula/elev.png",
+        "snow_prob": "textures/region_gora_gula/snow_prob.png",
+        "anomaly": "textures/region_gora_gula/anomaly.png",
+        "cluster": "textures/region_gora_gula/cluster.png",
+        "emis": "textures/region_gora_gula/emis.png",
+        "eps_refl": "textures/region_gora_gula/eps_refl.png",
+        "refl_norm": "textures/region_gora_gula/refl_norm.png",
+        "slope": "textures/region_gora_gula/slope.png",
+        "elev_snow": "textures/region_gora_gula/elev_snow.png",
+        "snow_prob_gray": "textures/region_gora_gula/snow_prob_gray.png",
+        "anomaly_gray": "textures/region_gora_gula/anomaly_gray.png",
+        "height16": "textures/region_gora_gula/height16.png"
+      },
+      "bounds": {
+        "lat": [
+          15.049999999999997,
+          29.949999999999996
+        ],
+        "lon": [
+          -7.949999999999989,
+          4.950000000000017
+        ]
+      },
+      "center": {
+        "lat": 22.499999999999993,
+        "lon": -1.4999999999999885
+      },
+      "exaggeration": 6,
+      "height_range_km": [
+        0.004000000189989805,
+        4.629499912261963
+      ],
+      "snowline_km": 3.78045691430267,
+      "snow_area_km2_default": 33341.40237491537,
+      "vertices": 19500,
+      "triangles": 38442
+    }
+  ]
+}
