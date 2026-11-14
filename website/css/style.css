@@ -1105,3 +1105,15 @@ body.scope-region [data-scope="globe"] {
     display: none;
   }
 }
+
+/* Hint under the loading text (first, uncached load) */
+.loading-hint {
+  margin-top: 1.4em;
+  max-width: 460px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-secondary);
+}
